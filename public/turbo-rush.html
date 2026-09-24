@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turbo Rush</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; padding: 20px 12px; font-family: system-ui, sans-serif; overflow-y: auto; }
+#game-wrap { width: 400px; max-width: 100%; background: #16213e; border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.6); user-select: none; }
+#menu-screen, #game-screen, #gameover-screen { display: none; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; }
+#menu-screen { display: flex; min-height: 560px; }
+.screen-title { font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 0.4rem; letter-spacing: -1px; }
+.screen-sub { font-size: 14px; color: #aaa; margin-bottom: 2rem; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.btn { padding: 11px 24px; border-radius: 10px; border: 1.5px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.08); color: #fff; font-size: 14px; cursor: pointer;
+  transition: all 0.15s; font-family: inherit; font-weight: 600; }
+.btn:hover { background: rgba(255,255,255,0.16); }
+.btn.primary { background: #378ADD; border-color: #378ADD; }
+.btn.primary:hover { background: #2a6dbf; }
+.btn.danger { background: #e24b4a; border-color: #e24b4a; }
+.diff-btns { display: flex; gap: 8px; margin-bottom: 2rem; }
+.diff-btn { padding: 8px 18px; border-radius: 8px; border: 1.5px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.06); color: #aaa; font-size: 13px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.diff-btn.active { border-color: #378ADD; background: rgba(55,138,221,0.2); color: #7bbfff; font-weight: 600; }
+#hud { display: flex; justify-content: space-between; align-items: center;
+  padding: 0.65rem 1rem; background: rgba(0,0,0,0.4); flex-wrap: wrap; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.hud-item { font-size: 12px; color: #888; display: flex; align-items: center; gap: 5px; }
+.hud-val { font-weight: 700; color: #fff; font-size: 14px; }
+#canvas-wrap { position: relative; }
+canvas { display: block; max-width: 100%; height: auto; }
+#controls-bar { display: flex; justify-content: center; align-items: center; gap: 10px;
+  padding: 0.9rem; background: rgba(0,0,0,0.3); flex-wrap: wrap; border-top: 1px solid rgba(255,255,255,0.06); }
+.ctrl-btn { width: 54px; height: 54px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.08); color: #fff; font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: background 0.1s; touch-action: none; }
+.ctrl-btn:active, .ctrl-btn.pressed { background: rgba(55,138,221,0.4); border-color: #378ADD; }
+#ctrl-pause { width: 44px; height: 44px; font-size: 15px; border-radius: 10px; }
+#pause-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.7); z-index: 10; align-items: center; justify-content: center; flex-direction: column; gap: 14px; }
+#pause-overlay.active { display: flex; }
+.pause-title { color: #fff; font-size: 24px; font-weight: 700; }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.5rem; width: 240px; }
+.stat-box { background: rgba(255,255,255,0.06); border-radius: 10px; border: 1px solid rgba(255,255,255,0.08);
+  padding: 0.8rem 1rem; text-align: center; }
+.stat-label { font-size: 12px; color: #888; margin-bottom: 4px; }
+.stat-val { font-size: 22px; font-weight: 700; color: #fff; }
+.color-picker { display: flex; gap: 10px; margin-bottom: 2rem; }
+.color-dot { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: border-color 0.15s; }
+.color-dot.selected { border-color: #fff; }
+.lives { display: flex; gap: 4px; }
+.heart { color: #e24b4a; font-size: 15px; }
+.heart.lost { color: #444; }
+.section-label { font-size: 12px; color: #666; margin-bottom: 0.5rem; letter-spacing: 0.5px; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div id="game-wrap">
+
+  <!-- MENU -->
+  <div id="menu-screen">
+    <div class="screen-title">🏎️ Turbo Rush</div>
+    <div class="screen-sub">Desvie do tráfego e sobreviva o máximo que puder!</div>
+    <div class="section-label">Cor do seu carro</div>
+    <div class="color-picker" id="color-picker">
+      <div class="color-dot selected" data-color="#378ADD" style="background:#378ADD"></div>
+      <div class="color-dot" data-color="#e24b4a" style="background:#e24b4a"></div>
+      <div class="color-dot" data-color="#1D9E75" style="background:#1D9E75"></div>
+      <div class="color-dot" data-color="#EF9F27" style="background:#EF9F27"></div>
+      <div class="color-dot" data-color="#D4537E" style="background:#D4537E"></div>
+      <div class="color-dot" data-color="#7F77DD" style="background:#7F77DD"></div>
+    </div>
+    <div class="section-label">Dificuldade</div>
+    <div class="diff-btns">
+      <button class="diff-btn" data-d="easy">Fácil</button>
+      <button class="diff-btn active" data-d="normal">Normal</button>
+      <button class="diff-btn" data-d="hard">Difícil</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn primary" id="btn-start">▶ Jogar</button>
+    </div>
+    <div style="margin-top:1.5rem;font-size:12px;color:#555;">Setas / WASD · toque nos botões abaixo · P para pausar</div>
+  </div>
+
+  <!-- JOGO -->
+  <div id="game-screen">
+    <div id="hud">
+      <div class="hud-item">⏱ <span class="hud-val" id="hud-time">0s</span></div>
+      <div class="hud-item">🏆 <span class="hud-val" id="hud-score">0</span></div>
+      <div class="hud-item">⚡ <span class="hud-val" id="hud-speed">1.0x</span></div>
+      <div class="hud-item">❤️ <div class="lives" id="hud-lives"></div></div>
+    </div>
+    <div id="canvas-wrap">
+      <canvas id="canvas" width="400" height="360"></canvas>
+      <div id="pause-overlay">
+        <div class="pause-title">⏸ Pausado</div>
+        <button class="btn" id="btn-resume">▶ Continuar</button>
+        <button class="btn" id="btn-menu-from-pause">☰ Menu</button>
+      </div>
+    </div>
+    <div id="controls-bar">
+      <button class="ctrl-btn" id="ctrl-left" aria-label="Esquerda">◀</button>
+      <button class="ctrl-btn" id="ctrl-up" aria-label="Acelerar">▲</button>
+      <button class="ctrl-btn" id="ctrl-down" aria-label="Frear">▼</button>
+      <button class="ctrl-btn" id="ctrl-right" aria-label="Direita">▶</button>
+      <button class="ctrl-btn" id="ctrl-pause" aria-label="Pausar">⏸</button>
+    </div>
+  </div>
+
+  <!-- GAME OVER -->
+  <div id="gameover-screen">
+    <div class="screen-title" id="go-title">Game Over</div>
+    <div class="screen-sub" id="go-sub">Continue treinando!</div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="stat-label">Tempo</div><div class="stat-val" id="go-time">0s</div></div>
+      <div class="stat-box"><div class="stat-label">Pontos</div><div class="stat-val" id="go-score">0</div></div>
+      <div class="stat-box"><div class="stat-label">Vel. Máxima</div><div class="stat-val" id="go-speed">1.0x</div></div>
+      <div class="stat-box"><div class="stat-label">Carros desviados</div><div class="stat-val" id="go-dodged">0</div></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn primary" id="btn-restart">↺ Jogar de novo</button>
+      <button class="btn" id="btn-menu">☰ Menu</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Bloco de anúncios AdSense: site cobra games jr -->
+<div style="width: 100%; max-width: 400px; margin: 20px auto 10px; text-align: center;">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6014151375770402"
+       crossorigin="anonymous"></script>
+  <!-- site cobra games jr -->
+  <ins class="adsbygoogle"
+       style="display:block"
+       data-ad-client="ca-pub-6014151375770402"
+       data-ad-slot="6889650396"
+       data-ad-format="auto"
+       data-full-width-responsive="true"></ins>
+  <script>
+       (adsbygoogle = window.adsbygoogle || []).push({});
+  </script>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const canvas = $('canvas'), ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+let state = {}, keys = {}, difficulty = 'normal', playerColor = '#378ADD';
+let animId = null, paused = false;
+
+const DIFFS = {
+  easy:   { spawnRate: 90, speedMul: 0.8, lives: 4 },
+  normal: { spawnRate: 65, speedMul: 1.0, lives: 3 },
+  hard:   { spawnRate: 40, speedMul: 1.35, lives: 2 }
+};
+const ENEMY_COLORS = ['#e24b4a','#EF9F27','#888780','#D4537E','#7F77DD','#1D9E75','#639922'];
+const LANE_X = [62, 122, 182, 242, 302];
+const ROAD_L = 44, ROAD_R = 356;
+
+function initState() {
+  const d = DIFFS[difficulty];
+  state = {
+    player: { x: W/2 - 14, y: H - 80, w: 28, h: 48, color: playerColor },
+    enemies: [], coins: [], particles: [],
+    roadY: 0, score: 0, time: 0, frame: 0,
+    gameSpeed: 1.0 * d.speedMul, maxSpeed: 1.0 * d.speedMul,
+    lives: d.lives, maxLives: d.lives,
+    spawnTimer: 0, coinTimer: 0, invincible: 0,
+    dodged: 0, running: true
+  };
+}
+
+function spawnEnemy() {
+  const lane = Math.floor(Math.random() * 5);
+  const types = ['car','truck','bus'];
+  const type = types[Math.floor(Math.random() * types.length)];
+  const h = type === 'bus' ? 64 : type === 'truck' ? 56 : 44;
+  state.enemies.push({
+    x: LANE_X[lane] - 14, y: -h - 10, w: 28, h, type,
+    color: ENEMY_COLORS[Math.floor(Math.random() * ENEMY_COLORS.length)],
+    dodged: false
+  });
+}
+
+function spawnCoin() {
+  const lane = Math.floor(Math.random() * 5);
+  state.coins.push({ x: LANE_X[lane], y: -16, r: 10, collected: false });
+}
+
+/* ---- DESENHO ---- */
+
+function drawRoad() {
+  // Fundo da estrada
+  ctx.fillStyle = '#3a3a3a';
+  ctx.fillRect(ROAD_L, 0, ROAD_R - ROAD_L, H);
+  // Calçadas
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(0, 0, ROAD_L, H);
+  ctx.fillRect(ROAD_R, 0, W - ROAD_R, H);
+  // Detalhes de calçada
+  ctx.fillStyle = '#333';
+  ctx.fillRect(0, 0, 8, H);
+  ctx.fillRect(W-8, 0, 8, H);
+  // Faixas tracejadas
+  ctx.strokeStyle = '#666';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([28, 22]);
+  const off = state.roadY % 50;
+  for (let i = 1; i < 5; i++) {
+    const x = ROAD_L + (ROAD_R - ROAD_L) * i / 5;
+    ctx.beginPath();
+    for (let y = -50 + off; y < H + 50; y += 50) {
+      ctx.moveTo(x, y); ctx.lineTo(x, y + 28);
+    }
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  // Bordas da pista
+  ctx.strokeStyle = '#ddd';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(ROAD_L, 0); ctx.lineTo(ROAD_L, H); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ROAD_R, 0); ctx.lineTo(ROAD_R, H); ctx.stroke();
+}
+
+function drawNitro(x, y, w, h, speed, frame) {
+  // Dois escapamentos: esquerdo e direito
+  const pipes = [x + w * 0.22, x + w * 0.78];
+  const baseLen = 10 + speed * 5;
+  const flicker = Math.sin(frame * 0.5) * 3 + Math.cos(frame * 0.8) * 2;
+  const len = baseLen + flicker;
+
+  pipes.forEach((px, i) => {
+    const pipeW = 5;
+    const pipeX = px - pipeW / 2;
+    const bottom = y + h;
+
+    // Cano do escapamento (metal)
+    ctx.fillStyle = '#555';
+    ctx.fillRect(pipeX, bottom - 4, pipeW, 6);
+
+    // Chama principal — azul elétrico
+    const grad1 = ctx.createLinearGradient(px, bottom, px, bottom + len);
+    grad1.addColorStop(0,   'rgba(80, 180, 255, 0.95)');
+    grad1.addColorStop(0.3, 'rgba(120, 80, 255, 0.85)');
+    grad1.addColorStop(0.7, 'rgba(200, 50, 255, 0.5)');
+    grad1.addColorStop(1,   'rgba(255, 20, 180, 0)');
+    ctx.fillStyle = grad1;
+    ctx.beginPath();
+    const w1 = pipeW * 0.9 + Math.sin(frame * 0.7 + i) * 1.2;
+    ctx.ellipse(px, bottom + len * 0.45, w1, len * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Chama interna — branco quente
+    const grad2 = ctx.createLinearGradient(px, bottom, px, bottom + len * 0.5);
+    grad2.addColorStop(0,   'rgba(255,255,255,0.95)');
+    grad2.addColorStop(0.5, 'rgba(160, 200, 255, 0.6)');
+    grad2.addColorStop(1,   'rgba(100, 100, 255, 0)');
+    ctx.fillStyle = grad2;
+    ctx.beginPath();
+    const w2 = pipeW * 0.45 + Math.cos(frame * 0.9 + i) * 0.8;
+    ctx.ellipse(px, bottom + len * 0.2, w2, len * 0.28, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Brilho no cano
+    ctx.fillStyle = 'rgba(100, 180, 255, 0.4)';
+    ctx.fillRect(pipeX - 1, bottom - 5, pipeW + 2, 5);
+  });
+}
+
+function drawCar(x, y, w, h, color, isPlayer, inv) {
+  if (isPlayer && inv > 0 && Math.floor(inv / 4) % 2 === 0) return;
+
+  // Nitro ANTES do carro (atrás visualmente)
+  if (isPlayer && state.running) {
+    drawNitro(x, y, w, h, state.gameSpeed, state.frame);
+  }
+
+  // Carroceria
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, 5);
+  ctx.fill();
+  // Sombra lateral
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(x + w - 4, y + 4, 4, h - 8);
+  // Vidro
+  ctx.fillStyle = isPlayer ? 'rgba(200,230,255,0.9)' : 'rgba(200,230,255,0.7)';
+  const ww = w * 0.65, gh = h * 0.28;
+  ctx.beginPath();
+  ctx.roundRect(x + (w-ww)/2, y + h * 0.18, ww, gh, 3);
+  ctx.fill();
+  if (!isPlayer) {
+    ctx.fillStyle = 'rgba(200,230,255,0.5)';
+    ctx.beginPath();
+    ctx.roundRect(x + (w-ww)/2, y + h * 0.56, ww, gh * 0.8, 3);
+    ctx.fill();
+  }
+  // Faróis
+  if (isPlayer) {
+    ctx.fillStyle = '#ffff88';
+    ctx.fillRect(x+3, y+3, 8, 5);
+    ctx.fillRect(x+w-11, y+3, 8, 5);
+    // Brilho do farol
+    ctx.fillStyle = 'rgba(255,255,150,0.3)';
+    ctx.fillRect(x+2, y, 10, 12);
+    ctx.fillRect(x+w-12, y, 10, 12);
+    // Placa traseira
+    ctx.fillStyle = '#eee';
+    ctx.fillRect(x + w*0.25, y + h - 6, w * 0.5, 4);
+  } else {
+    ctx.fillStyle = '#ff4444';
+    ctx.fillRect(x+3, y+h-8, 8, 5);
+    ctx.fillRect(x+w-11, y+h-8, 8, 5);
+  }
+  // Rodas
+  ctx.fillStyle = '#222';
+  ctx.fillRect(x-5, y+6, 5, 12);
+  ctx.fillRect(x+w, y+6, 5, 12);
+  ctx.fillRect(x-5, y+h-18, 5, 12);
+  ctx.fillRect(x+w, y+h-18, 5, 12);
+  // Aro das rodas
+  ctx.fillStyle = '#666';
+  ctx.fillRect(x-4, y+8, 3, 8);
+  ctx.fillRect(x+w+1, y+8, 3, 8);
+  ctx.fillRect(x-4, y+h-16, 3, 8);
+  ctx.fillRect(x+w+1, y+h-16, 3, 8);
+}
+
+function drawCoin(c) {
+  ctx.save();
+  ctx.shadowColor = '#EF9F27';
+  ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, c.r, 0, Math.PI*2);
+  ctx.fillStyle = '#EF9F27';
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#FAC775';
+  ctx.beginPath();
+  ctx.arc(c.x - 2, c.y - 2, c.r * 0.45, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#BA7517';
+  ctx.font = 'bold 10px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('$', c.x, c.y);
+  ctx.restore();
+}
+
+function drawParticles() {
+  state.particles.forEach(p => {
+    ctx.globalAlpha = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function drawBackground() {
+  // Árvores / cenário nas calçadas
+  const treeOff = (state.roadY * 2) % 120;
+  ctx.fillStyle = '#1e3a1e';
+  for (let y = -120 + treeOff; y < H + 120; y += 120) {
+    // Esquerda
+    ctx.beginPath();
+    ctx.arc(20, y, 12, 0, Math.PI*2);
+    ctx.fill();
+    // Direita
+    ctx.beginPath();
+    ctx.arc(W-20, y, 12, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+/* ---- LÓGICA ---- */
+
+function aabb(a, b) {
+  return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
+}
+
+function burst(x, y, color, n = 10) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 1.5 + Math.random() * 3.5;
+    state.particles.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, r: 2+Math.random()*3, color, life: 35, maxLife: 35 });
+  }
+}
+
+function update() {
+  if (!state.running || paused) return;
+  state.frame++;
+  state.time += 1/60;
+  state.roadY = (state.roadY + state.gameSpeed * 4) % 50;
+
+  // Aumenta velocidade ao longo do tempo
+  if (state.frame % 400 === 0) {
+    state.gameSpeed = Math.min(state.gameSpeed + 0.18, 5.0);
+    if (state.gameSpeed > state.maxSpeed) state.maxSpeed = state.gameSpeed;
+  }
+
+  state.score += Math.floor(state.gameSpeed * 0.6);
+
+  const d = DIFFS[difficulty];
+  const spawnRate = Math.max(16, d.spawnRate - Math.floor(state.frame / 280) * 3);
+
+  state.spawnTimer++;
+  if (state.spawnTimer >= spawnRate) { spawnEnemy(); state.spawnTimer = 0; }
+  state.coinTimer++;
+  if (state.coinTimer >= 85) { spawnCoin(); state.coinTimer = 0; }
+  if (state.invincible > 0) state.invincible--;
+
+  // Movimento do jogador
+  const p = state.player;
+  const spd = state.gameSpeed * 2.6;
+  if (keys['ArrowLeft'] || keys['a'] || keys['A']) p.x = Math.max(ROAD_L + 2, p.x - spd);
+  if (keys['ArrowRight'] || keys['d'] || keys['D']) p.x = Math.min(ROAD_R - p.w - 2, p.x + spd);
+  if (keys['ArrowUp'] || keys['w'] || keys['W']) p.y = Math.max(10, p.y - spd * 0.7);
+  if (keys['ArrowDown'] || keys['s'] || keys['S']) p.y = Math.min(H - p.h - 10, p.y + spd * 0.7);
+
+  // Inimigos
+  state.enemies.forEach(e => {
+    e.y += state.gameSpeed * 3.4;
+    if (!e.dodged && e.y > H + 10) { e.dodged = true; state.dodged++; }
+    if (state.invincible === 0 && aabb(p, e)) {
+      state.lives--;
+      state.invincible = 90;
+      burst(p.x + p.w/2, p.y + p.h/2, '#e24b4a', 14);
+      burst(e.x + e.w/2, e.y + e.h/2, e.color, 10);
+      if (state.lives <= 0) { state.running = false; showGameOver(); }
+    }
+  });
+
+  // Moedas
+  state.coins.forEach(c => {
+    c.y += state.gameSpeed * 2.6;
+    const cx = p.x + p.w/2, cy = p.y + p.h/2;
+    if (!c.collected && Math.abs(cx - c.x) < p.w/2 + c.r && Math.abs(cy - c.y) < p.h/2 + c.r) {
+      c.collected = true;
+      state.score += 50;
+      burst(c.x, c.y, '#EF9F27', 8);
+    }
+  });
+
+  // Limpeza
+  state.enemies = state.enemies.filter(e => e.y < H + 100);
+  state.coins = state.coins.filter(c => c.y < H + 40 && !c.collected);
+  state.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vx *= 0.93; p.vy *= 0.93; p.life--; });
+  state.particles = state.particles.filter(p => p.life > 0);
+
+  updateHUD();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  drawRoad();
+  state.coins.forEach(drawCoin);
+  state.enemies.forEach(e => drawCar(e.x, e.y, e.w, e.h, e.color, false, 0));
+  const p = state.player;
+  drawCar(p.x, p.y, p.w, p.h, p.color, true, state.invincible);
+  drawParticles();
+}
+
+function gameLoop() {
+  update();
+  draw();
+  if (state.running) animId = requestAnimationFrame(gameLoop);
+}
+
+function updateHUD() {
+  $('hud-time').textContent = Math.floor(state.time) + 's';
+  $('hud-score').textContent = state.score;
+  $('hud-speed').textContent = state.gameSpeed.toFixed(1) + 'x';
+  const lv = $('hud-lives');
+  lv.innerHTML = '';
+  for (let i = 0; i < state.maxLives; i++) {
+    const s = document.createElement('span');
+    s.className = 'heart' + (i >= state.lives ? ' lost' : '');
+    s.textContent = '❤';
+    lv.appendChild(s);
+  }
+}
+
+function showGameOver() {
+  cancelAnimationFrame(animId);
+  $('go-title').textContent = state.score > 800 ? '🏆 Lendário!' : state.score > 400 ? '🥇 Incrível!' : state.score > 150 ? '👏 Bem feito!' : 'Game Over';
+  $('go-sub').textContent = state.score > 400 ? 'Você é um piloto de elite!' : 'Continue treinando!';
+  $('go-time').textContent = Math.floor(state.time) + 's';
+  $('go-score').textContent = state.score;
+  $('go-speed').textContent = state.maxSpeed.toFixed(1) + 'x';
+  $('go-dodged').textContent = state.dodged;
+  showScreen('gameover-screen');
+}
+
+function showScreen(id) {
+  ['menu-screen','game-screen','gameover-screen'].forEach(s => $(s).style.display = 'none');
+  $(id).style.display = 'flex';
+}
+
+function startGame() {
+  cancelAnimationFrame(animId);
+  paused = false;
+  $('pause-overlay').classList.remove('active');
+  initState();
+  showScreen('game-screen');
+  updateHUD();
+  gameLoop();
+}
+
+/* ---- EVENTOS ---- */
+
+$('btn-start').onclick = startGame;
+$('btn-restart').onclick = startGame;
+$('btn-menu').onclick = () => { cancelAnimationFrame(animId); showScreen('menu-screen'); };
+$('btn-menu-from-pause').onclick = () => {
+  cancelAnimationFrame(animId); paused = false;
+  $('pause-overlay').classList.remove('active');
+  showScreen('menu-screen');
+};
+$('btn-resume').onclick = () => {
+  paused = false;
+  $('pause-overlay').classList.remove('active');
+  $('ctrl-pause').textContent = '⏸';
+  if (state.running) gameLoop();
+};
+$('ctrl-pause').onclick = () => {
+  if (!state.running) return;
+  paused = !paused;
+  $('ctrl-pause').textContent = paused ? '▶' : '⏸';
+  if (paused) { cancelAnimationFrame(animId); $('pause-overlay').classList.add('active'); }
+  else { $('pause-overlay').classList.remove('active'); gameLoop(); }
+};
+
+// Teclado
+document.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') $('ctrl-pause').click();
+});
+document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+// Botões de toque / mouse
+const ctrlMap = { 'ctrl-left': 'ArrowLeft', 'ctrl-right': 'ArrowRight', 'ctrl-up': 'ArrowUp', 'ctrl-down': 'ArrowDown' };
+Object.entries(ctrlMap).forEach(([id, key]) => {
+  const btn = $(id);
+  const on  = () => { keys[key] = true;  btn.classList.add('pressed'); };
+  const off = () => { keys[key] = false; btn.classList.remove('pressed'); };
+  btn.addEventListener('pointerdown', e => { e.preventDefault(); on(); });
+  btn.addEventListener('pointerup',   off);
+  btn.addEventListener('pointerleave', off);
+});
+
+// Dificuldade
+document.querySelectorAll('.diff-btn').forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll('.diff-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    difficulty = b.dataset.d;
+  };
+});
+
+// Cor do carro
+document.querySelectorAll('.color-dot').forEach(d => {
+  d.onclick = () => {
+    document.querySelectorAll('.color-dot').forEach(x => x.classList.remove('selected'));
+    d.classList.add('selected');
+    playerColor = d.dataset.color;
+  };
+});
+</script>
+</body>
+</html>

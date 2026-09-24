@@ -1,0 +1,8 @@
+{
+  "name": "COBRA GAMES JR",
+  "description": "Editora de jogos casuais para dispositivos móveis sediada em Dubai.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
