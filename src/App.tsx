@@ -105,7 +105,7 @@ const FeaturedGames = ({ onOpenTurboRush }: { onOpenTurboRush: () => void }) => 
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
         {/* Card 1 */}
-        <div id="featured-game-card-1" className="bg-white border border-slate-100 rounded-3xl p-8 shadow-xl shadow-slate-200/40 transition-all hover:-translate-y-1 flex flex-col justify-between">
+        <div id="featured-game-card-1" className="bg-white border border-slate-100 rounded-3xl p-8 shadow-xl shadow-slate-200/40 transition-all duration-300 ease-out hover:scale-105 hover:-translate-y-1 flex flex-col justify-between">
           <div>
             <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-6 overflow-hidden">
               <img src={wormIcon} alt="Minhoca Arco-Íris Brilhante" className="w-full h-full object-cover" />
