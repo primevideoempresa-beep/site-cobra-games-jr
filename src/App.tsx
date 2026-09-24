@@ -8,6 +8,10 @@ import { Menu, X, Download, MapPin, Mail, Gamepad2, Apple, PlaySquare, Play, Fla
 import { otherGames } from './data';
 import wormIcon from './assets/images/regenerated_image_1788833588389.jpg';
 import { TurboRushModal } from './components/TurboRushModal';
+import { CookiePolicyModal } from './components/CookiePolicyModal';
+import { CookieConsentBanner } from './components/CookieConsentBanner';
+import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
+import { TermsOfUseModal } from './components/TermsOfUseModal';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -63,9 +67,6 @@ const HeroAndStats = () => (
         <a href="#jogos" className="bg-white hover:bg-blue-50 text-blue-900 rounded-full px-8 py-4 font-bold transition-all shadow-lg text-lg">
           Explore nossos jogos
         </a>
-        <a href="#contatos" className="bg-transparent hover:bg-blue-800/50 text-white border border-blue-400/50 hover:border-blue-300 rounded-full px-8 py-4 font-bold transition-all text-lg">
-          Contate-nos
-        </a>
       </div>
     </section>
 
@@ -107,7 +108,7 @@ const FeaturedGames = ({ onOpenTurboRush }: { onOpenTurboRush: () => void }) => 
         <div id="featured-game-card-1" className="relative bg-white border border-amber-100 rounded-3xl p-8 shadow-xl shadow-slate-200/40 transition-all duration-300 ease-out hover:scale-105 hover:-translate-y-1 flex flex-col justify-between">
           <div>
             <div className="flex items-start justify-between gap-4 mb-6">
-              <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center overflow-hidden shadow-inner">
+              <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center overflow-hidden shadow-inner animate-pulse">
                 <img src={wormIcon} alt="Minhoca Arco-Íris Brilhante" className="w-full h-full object-cover" />
               </div>
               <div id="bestseller-badge-1" className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-full text-xs font-black tracking-wide shadow-md shadow-amber-500/20 uppercase">
@@ -204,7 +205,17 @@ const OtherGames = () => (
 );
 
 
-const ContactAndFooter = () => {
+const ContactAndFooter = ({
+  onOpenCookiePolicy,
+  onOpenCookiePreferences,
+  onOpenPrivacyPolicy,
+  onOpenTermsOfUse,
+}: {
+  onOpenCookiePolicy: () => void;
+  onOpenCookiePreferences: () => void;
+  onOpenPrivacyPolicy: () => void;
+  onOpenTermsOfUse: () => void;
+}) => {
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
   const [errors, setErrors] = useState({ email: '', message: '' });
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -331,7 +342,7 @@ const ContactAndFooter = () => {
            <div>
              <h4 className="text-white font-bold mb-4">Nossos jogos</h4>
              <ul className="space-y-2 text-sm text-slate-400">
-               <li><a href="#" className="hover:text-blue-400 transition-colors">Google Play</a></li>
+               <li><a href="https://play.google.com/store/apps/details?id=com.aistudio.cobrapromax.game&pcampaignid=web_share" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors">Google Play</a></li>
              </ul>
            </div>
            <div>
@@ -342,19 +353,73 @@ const ContactAndFooter = () => {
            </div>
            <div>
              <h4 className="text-white font-bold mb-4">Jurídico</h4>
-             <ul className="space-y-2 text-sm text-slate-400">
-               <li><a href="#" className="hover:text-blue-400 transition-colors">Termos de Uso</a></li>
-               <li><a href="#" className="hover:text-blue-400 transition-colors">Política de Privacidade</a></li>
-               <li><a href="#" className="hover:text-blue-400 transition-colors">Política de Cookies</a></li>
+             <ul className="space-y-2.5 text-sm text-slate-400">
+               <li>
+                 <button 
+                   type="button"
+                   onClick={onOpenTermsOfUse}
+                   className="hover:text-blue-400 transition-colors text-left cursor-pointer flex items-center gap-1.5"
+                 >
+                   Termos de Uso
+                 </button>
+               </li>
+               <li>
+                 <button 
+                   type="button"
+                   onClick={onOpenPrivacyPolicy}
+                   className="hover:text-blue-400 transition-colors text-left cursor-pointer flex items-center gap-1.5"
+                 >
+                   Política de Privacidade
+                 </button>
+               </li>
+               <li>
+                 <button 
+                   type="button"
+                   onClick={onOpenCookiePolicy}
+                   className="hover:text-blue-400 transition-colors text-left cursor-pointer flex items-center gap-1.5"
+                 >
+                   Política de Cookies
+                 </button>
+               </li>
+               <li>
+                 <button 
+                   type="button"
+                   onClick={onOpenCookiePreferences}
+                   className="text-xs text-slate-500 hover:text-slate-300 transition-colors text-left cursor-pointer"
+                 >
+                   Preferências de Cookies
+                 </button>
+               </li>
              </ul>
            </div>
         </div>
 
         <div className="flex flex-col md:flex-row items-center justify-between pt-8 border-t border-slate-800 text-sm text-slate-500">
           <div>© 2026 COBRA GAMES JR. Todos os direitos reservados.</div>
-          <div className="flex gap-4 mt-4 md:mt-0">
-            <a href="#" className="hover:text-slate-300 transition-colors">Termos de uso e Política de privacidade</a>
-            <a href="#" className="hover:text-slate-300 transition-colors">Política de Cookies</a>
+          <div className="flex flex-wrap gap-4 mt-4 md:mt-0 items-center justify-center">
+            <button 
+              type="button"
+              onClick={onOpenTermsOfUse}
+              className="hover:text-slate-300 transition-colors cursor-pointer"
+            >
+              Termos de Uso
+            </button>
+            <span className="text-slate-700 hidden sm:inline">•</span>
+            <button 
+              type="button"
+              onClick={onOpenPrivacyPolicy}
+              className="hover:text-slate-300 transition-colors cursor-pointer"
+            >
+              Política de Privacidade
+            </button>
+            <span className="text-slate-700 hidden sm:inline">•</span>
+            <button 
+              type="button"
+              onClick={onOpenCookiePolicy}
+              className="hover:text-slate-300 transition-colors cursor-pointer font-medium text-slate-400"
+            >
+              Política de Cookies
+            </button>
           </div>
         </div>
       </div>
@@ -364,6 +429,44 @@ const ContactAndFooter = () => {
 
 export default function App() {
   const [isTurboRushOpen, setIsTurboRushOpen] = useState(false);
+  const [isCookiePolicyOpen, setIsCookiePolicyOpen] = useState(false);
+  const [isPrivacyPolicyOpen, setIsPrivacyPolicyOpen] = useState(false);
+  const [isTermsOfUseOpen, setIsTermsOfUseOpen] = useState(false);
+  const [isCookiePreferencesOpen, setIsCookiePreferencesOpen] = useState(false);
+
+  // Allow direct access via URL hash or query param: #politica-privacidade, #privacidade, #politica-cookies
+  React.useEffect(() => {
+    const handleCheckHash = () => {
+      const hash = window.location.hash.toLowerCase();
+      const search = window.location.search.toLowerCase();
+      if (
+        hash === '#termos-de-uso' || 
+        hash === '#termos' || 
+        hash === '#terms' ||
+        search.includes('politica=termos')
+      ) {
+        setIsTermsOfUseOpen(true);
+      } else if (
+        hash === '#politica-privacidade' || 
+        hash === '#privacidade' || 
+        hash === '#privacy' ||
+        search.includes('politica=privacidade')
+      ) {
+        setIsPrivacyPolicyOpen(true);
+      } else if (
+        hash === '#politica-cookies' || 
+        hash === '#cookies' || 
+        hash === '#politica_de_cookies' ||
+        search.includes('politica=cookies')
+      ) {
+        setIsCookiePolicyOpen(true);
+      }
+    };
+
+    handleCheckHash();
+    window.addEventListener('hashchange', handleCheckHash);
+    return () => window.removeEventListener('hashchange', handleCheckHash);
+  }, []);
 
   return (
     <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-blue-100">
@@ -372,10 +475,66 @@ export default function App() {
         <HeroAndStats />
         <FeaturedGames onOpenTurboRush={() => setIsTurboRushOpen(true)} />
       </main>
-      <ContactAndFooter />
+      <ContactAndFooter 
+        onOpenCookiePolicy={() => setIsCookiePolicyOpen(true)}
+        onOpenCookiePreferences={() => setIsCookiePreferencesOpen(true)}
+        onOpenPrivacyPolicy={() => setIsPrivacyPolicyOpen(true)}
+        onOpenTermsOfUse={() => setIsTermsOfUseOpen(true)}
+      />
+      
+      {/* Turbo Rush Game Modal */}
       <TurboRushModal 
         isOpen={isTurboRushOpen} 
         onClose={() => setIsTurboRushOpen(false)} 
+      />
+
+      {/* Complete Cookie Policy Modal */}
+      <CookiePolicyModal 
+        isOpen={isCookiePolicyOpen}
+        onClose={() => {
+          setIsCookiePolicyOpen(false);
+          if (window.location.hash === '#politica-cookies' || window.location.hash === '#cookies') {
+            history.pushState('', document.title, window.location.pathname + window.location.search);
+          }
+        }}
+        onOpenPreferences={() => setIsCookiePreferencesOpen(true)}
+      />
+
+      {/* Complete Privacy Policy Modal */}
+      <PrivacyPolicyModal 
+        isOpen={isPrivacyPolicyOpen}
+        onClose={() => {
+          setIsPrivacyPolicyOpen(false);
+          if (window.location.hash === '#politica-privacidade' || window.location.hash === '#privacidade') {
+            history.pushState('', document.title, window.location.pathname + window.location.search);
+          }
+        }}
+        onOpenCookiePolicy={() => {
+          setIsPrivacyPolicyOpen(false);
+          setIsCookiePolicyOpen(true);
+        }}
+      />
+
+      {/* Complete Terms of Use Modal */}
+      <TermsOfUseModal 
+        isOpen={isTermsOfUseOpen}
+        onClose={() => {
+          setIsTermsOfUseOpen(false);
+          if (window.location.hash === '#termos-de-uso' || window.location.hash === '#termos') {
+            history.pushState('', document.title, window.location.pathname + window.location.search);
+          }
+        }}
+        onOpenPrivacyPolicy={() => {
+          setIsTermsOfUseOpen(false);
+          setIsPrivacyPolicyOpen(true);
+        }}
+      />
+
+      {/* Cookie Consent Banner and Preferences Modal */}
+      <CookieConsentBanner 
+        onOpenPolicy={() => setIsCookiePolicyOpen(true)}
+        isPreferencesOpen={isCookiePreferencesOpen}
+        setIsPreferencesOpen={setIsCookiePreferencesOpen}
       />
     </div>
   );
