@@ -17,6 +17,7 @@ import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
 import { TermsOfUseModal } from './components/TermsOfUseModal';
 import { DeskRacerModal } from './components/DeskRacerModal';
+import { KledModal } from './components/KledModal';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -129,7 +130,7 @@ const HeroAndStats = () => (
 const FeaturedGames = ({ 
   onOpenCobraProMax,
   onOpenTurboRush, 
-  onOpenDeskRacer 
+  onOpenDeskRacer
 }: { 
   onOpenCobraProMax: () => void;
   onOpenTurboRush: () => void; 
@@ -167,30 +168,22 @@ const FeaturedGames = ({
               </div>
             </div>
             <div className="text-sm font-bold text-emerald-600 mb-2 flex items-center gap-1">
-              <Download className="w-4 h-4" /> Mais 5 novos downloads
+              <Download className="w-4 h-4" /> Mais de 500 milhões de downloads
             </div>
             <h4 className="text-2xl font-bold text-slate-900 mb-3">Cobra Pro Max — Cobra Faminta</h4>
             <p className="text-slate-500 mb-8 leading-relaxed">
-              Crie a minhoca mais comprida e faminta em uma arena multijogador vibrante. Um clássico do snake io reinventado — um dos nossos títulos mais jogados no mundo todo.
+              Crie a minhoca mais comprida e faminta em uma arena multijogador vibrante. Um clássico do snake io reinventado — disponível para download no Google Play.
             </p>
           </div>
           <div className="flex flex-col gap-2.5">
-            <button 
-              id="featured-play-btn-1"
-              type="button"
-              onClick={onOpenCobraProMax}
-              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <Play className="w-5 h-5 fill-current" /> Jogar Cobra Pro Max
-            </button>
             <a 
               id="featured-download-btn-1"
               href="https://play.google.com/store/apps/details?id=com.aistudio.cobrapromax.game&pcampaignid=web_share"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full bg-slate-900 text-white rounded-xl py-2.5 font-semibold flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors cursor-pointer text-xs sm:text-sm"
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-3.5 font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm shadow-md"
             >
-              <PlaySquare className="w-4 h-4" /> Google Play
+              <PlaySquare className="w-5 h-5" /> Google Play
             </a>
           </div>
         </div>
@@ -251,6 +244,35 @@ const FeaturedGames = ({
             >
               <Play className="w-5 h-5 fill-current" /> Jogar Desk Racer
             </a>
+          </div>
+        </div>
+
+        {/* Card 4 (Cobra Pro Max — Versão Web) */}
+        <div id="featured-game-card-4" className="relative bg-white border border-emerald-100 rounded-3xl p-8 shadow-xl shadow-slate-200/40 transition-all duration-300 ease-out hover:scale-105 hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-200/50 flex flex-col justify-between">
+          <div className="absolute top-4 right-4 inline-flex items-center px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-500 text-white rounded-full text-xs font-black tracking-wide shadow-lg shadow-emerald-500/30 animate-pulse">
+            ★ Edição Web
+          </div>
+          <div>
+            <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-6 overflow-hidden shadow-inner">
+              <img src={wormIcon} alt="Cobra Pro Max Web" className="w-full h-full object-cover" />
+            </div>
+            <div className="text-sm font-bold text-emerald-600 mb-2 flex items-center gap-1">
+              <Download className="w-4 h-4" /> Jogar no Navegador • Arena Snake IO
+            </div>
+            <h4 id="featured-game-title-4" className="text-2xl font-bold text-slate-900 mb-3">Cobra Pro Max — Versão Web</h4>
+            <p className="text-slate-500 mb-8 leading-relaxed">
+              Jogue a arena multiplayer do Cobra Pro Max diretamente no seu navegador! Desvie de oponentes, coma orbes luminosos, utilize o acelerador e conquiste o primeiro lugar no placar mundial!
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <button 
+              id="featured-play-btn-4"
+              type="button"
+              onClick={onOpenCobraProMax}
+              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl py-3.5 font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Play className="w-5 h-5 fill-current" /> Jogar Cobra Pro Max
+            </button>
           </div>
         </div>
       </div>
@@ -566,6 +588,7 @@ export default function App() {
   const [isCobraProMaxOpen, setIsCobraProMaxOpen] = useState(false);
   const [isTurboRushOpen, setIsTurboRushOpen] = useState(false);
   const [isDeskRacerOpen, setIsDeskRacerOpen] = useState(false);
+  const [isKledOpen, setIsKledOpen] = useState(false);
   const [isCookiePolicyOpen, setIsCookiePolicyOpen] = useState(false);
   const [isPrivacyPolicyOpen, setIsPrivacyPolicyOpen] = useState(false);
   const [isTermsOfUseOpen, setIsTermsOfUseOpen] = useState(false);
@@ -639,6 +662,12 @@ export default function App() {
       <DeskRacerModal 
         isOpen={isDeskRacerOpen} 
         onClose={() => setIsDeskRacerOpen(false)} 
+      />
+
+      {/* Kled 3D Game Modal */}
+      <KledModal 
+        isOpen={isKledOpen} 
+        onClose={() => setIsKledOpen(false)} 
       />
 
       {/* Complete Cookie Policy Modal */}
