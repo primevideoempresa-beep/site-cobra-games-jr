@@ -30,7 +30,7 @@ export const TurboRushModal: React.FC<TurboRushModalProps> = ({ isOpen, onClose 
         className={`bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl flex flex-col transition-all overflow-hidden ${
           isFullscreen 
             ? 'w-full h-full rounded-none' 
-            : 'w-full max-w-2xl h-[92vh] max-h-[720px]'
+            : 'w-full max-w-5xl h-[95vh] max-h-[920px]'
         }`}
       >
         {/* Header */}
@@ -41,12 +41,12 @@ export const TurboRushModal: React.FC<TurboRushModalProps> = ({ isOpen, onClose 
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-white font-bold text-base sm:text-lg tracking-tight">Turbo Rush</h3>
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  Pronto para jogar
+                <h3 className="text-white font-bold text-base sm:text-lg tracking-tight">Turbo Rush 3D</h3>
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
+                  Supercarros 3D (Ferrari, Lambo)
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">Desvie do tráfego e sobreviva com nitro ativo!</p>
+              <p className="text-xs text-slate-400 hidden sm:block">Modelos de alto padrão 3D (Ferrari, Lamborghini), tintas metálicas e nitro turbo!</p>
             </div>
           </div>
 

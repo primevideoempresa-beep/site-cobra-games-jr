@@ -1,1 +1,45 @@
 @import "tailwindcss";
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) scale(1.02);
+  }
+  50% {
+    transform: translateY(-8px) scale(1.02);
+  }
+}
+
+#featured-game-card-3 {
+  border: 2px solid #3b82f6;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+  animation: float 3.5s ease-in-out infinite;
+}
+
+#featured-game-card-3:hover {
+  animation-play-state: paused;
+}
+
+#featured-download-btn-3:hover {
+  background-color: #2563eb;
+  transform: scale(1.05);
+  box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.4);
+}
+
+#featured-download-btn-3:active {
+  transform: scale(0.98);
+}
+
+#featured-game-card-1 {
+  border: 2px solid #10b981;
+  box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.25);
+}
+
+#featured-play-btn-1:hover {
+  background-color: #059669;
+  transform: scale(1.02);
+  box-shadow: 0 10px 20px -3px rgba(16, 185, 129, 0.4);
+}
+
+#featured-play-btn-1:active {
+  transform: scale(0.98);
+}

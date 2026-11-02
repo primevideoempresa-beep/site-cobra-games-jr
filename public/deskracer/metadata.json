@@ -1,0 +1,6 @@
+{
+  "name": "Corredor de Mesa",
+  "description": "Jogo de corrida de kart em miniatura em circuito de mesa em Three.js",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

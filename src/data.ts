@@ -1,62 +1,22 @@
 export const otherGames = [
-  {
-    title: "Bouncemasters: Hit & Jump",
-    stats: "Mais de 100 milhões de downloads · 4,6★"
-  },
-  {
-    title: "Levante-se: Proteja o balão",
-    stats: "Mais de 100 milhões de downloads"
-  },
-  {
-    title: "Bottle Jump 3D",
-    stats: "Mais de 100 milhões de downloads · 4,5★"
-  },
-  {
-    title: "ESTRELA: Corrida Super Difícil e Incrível",
-    stats: "Mais de 100 milhões de downloads"
-  },
-  {
-    title: "Jelly Run 2048",
-    stats: "Mais de 50 milhões de downloads · 4,7★"
-  },
-  {
-    title: "Tingir com força — Guerra de cores",
-    stats: "Mais de 50 milhões de downloads · 4,7★"
-  },
-  {
-    title: "Corrida Divertida 3D: Corrida e Parkour",
-    stats: "4,6★ · Mais de 800 mil avaliações"
-  },
-  {
-    title: "Jogo de Espadas! Ninja Slice Runner",
-    stats: "4,7★ · Mais de 450 mil avaliações"
-  },
-  {
-    title: "Corrida Run Race 3D",
-    stats: "4,7★ · Mais de 520 mil avaliações"
-  },
-  {
-    title: "Color Bump 3D",
-    stats: "4,6★ · Mais de 500 mil avaliações"
-  },
-  {
-    title: "Virada de Garrafa 3D",
-    stats: "4,5★ · Mais de 700 mil avaliações"
-  },
-  {
-    title: "State.io — Conquiste o Mundo",
-    stats: "4,6★ · Mais de 240 mil avaliações"
-  },
-  {
-    title: "Spinner.io",
-    stats: "4,7★ · Mais de 220 mil avaliações"
-  },
-  {
-    title: "Twisty Arrow: Jogo de Arco",
-    stats: "4,6★ · Mais de 250 mil avaliações"
-  },
-  {
-    title: "Epic Race 3D",
-    stats: "4,6★ · Mais de 290 mil avaliações"
-  }
+  { title: "Bouncemasters: Hit & Jump", stats: "Mais de 100 milhões de downloads · 4,6★", category: "Casual" },
+  { title: "Levante-se: Proteja o balão", stats: "Mais de 100 milhões de downloads", category: "Casual" },
+  { title: "Bottle Jump 3D", stats: "Mais de 100 milhões de downloads · 4,5★", category: "Casual" },
+  { title: "ESTRELA: Corrida Super Difícil e Incrível", stats: "Mais de 100 milhões de downloads", category: "Corrida" },
+  { title: "Jelly Run 2048", stats: "Mais de 50 milhões de downloads · 4,7★", category: "Casual" },
+  { title: "Tingir com força — Guerra de cores", stats: "Mais de 50 milhões de downloads · 4,7★", category: "Ação" },
+  { title: "Corrida Divertida 3D: Corrida e Parkour", stats: "4,6★ · Mais de 800 mil avaliações", category: "Corrida" },
+  { title: "Jogo de Espadas! Ninja Slice Runner", stats: "4,7★ · Mais de 450 mil avaliações", category: "Ação" },
+  { title: "Corrida Run Race 3D", stats: "4,7★ · Mais de 520 mil avaliações", category: "Corrida" },
+  { title: "Color Bump 3D", stats: "4,6★ · Mais de 500 mil avaliações", category: "Casual" },
+  { title: "Virada de Garrafa 3D", stats: "4,5★ · Mais de 700 mil avaliações", category: "Casual" },
+  { title: "State.io — Conquiste o Mundo", stats: "4,6★ · Mais de 240 mil avaliações", category: "Ação" },
+  { title: "Spinner.io", stats: "4,7★ · Mais de 220 mil avaliações", category: "Casual" },
+  { title: "Twisty Arrow: Jogo de Arco", stats: "4,6★ · Mais de 250 mil avaliações", category: "Ação" },
+  { title: "Epic Race 3D", stats: "4,6★ · Mais de 290 mil avaliações", category: "Corrida" },
+  { title: "Subway Surfers", stats: "Mais de 1 bilhão de downloads · 4,6★", category: "Corrida" },
+  { title: "Candy Crush Saga", stats: "Mais de 1 bilhão de downloads · 4,7★", category: "Casual" },
+  { title: "Roblox", stats: "Mais de 500 milhões de downloads · 4,5★", category: "Casual" },
+  { title: "Among Us", stats: "Mais de 500 milhões de downloads · 4,4★", category: "Ação" },
+  { title: "Free Fire", stats: "Mais de 1 bilhão de downloads · 4,3★", category: "Ação" }
 ];

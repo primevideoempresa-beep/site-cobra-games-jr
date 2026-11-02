@@ -4,14 +4,19 @@
  */
 
 import React, { useState } from 'react';
-import { Menu, X, Download, MapPin, Mail, Gamepad2, Apple, PlaySquare, Play, Flame, Trophy } from 'lucide-react';
+import { Menu, X, Download, MapPin, Mail, Gamepad2, Apple, PlaySquare, Play, Trophy } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { otherGames } from './data';
 import wormIcon from './assets/images/regenerated_image_1788833588389.jpg';
+import kledImage from './assets/images/kled_3d_render_1793497542465.jpg';
+import deskRacerImage from './assets/images/desk_racer_3d_1793497611855.jpg';
 import { TurboRushModal } from './components/TurboRushModal';
+import { CobraProMaxModal } from './components/CobraProMaxModal';
 import { CookiePolicyModal } from './components/CookiePolicyModal';
 import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
 import { TermsOfUseModal } from './components/TermsOfUseModal';
+import { DeskRacerModal } from './components/DeskRacerModal';
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,9 +24,41 @@ const Navbar = () => {
   return (
     <nav className="fixed top-0 w-full bg-blue-900/95 backdrop-blur-md z-50 border-b border-blue-800">
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-        <a href="#" className="text-white font-black text-xl tracking-tight flex items-center gap-2">
-          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center">
-            <Gamepad2 className="w-5 h-5 text-blue-900" />
+        <a href="#" className="text-white font-black text-xl tracking-tight flex items-center gap-2.5 group">
+          <div className="w-9 h-9 bg-white rounded-xl shadow-md flex items-center justify-center transition-transform group-hover:scale-105 border border-slate-100">
+            <svg viewBox="0 0 32 32" className="w-7 h-7" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Controller Body */}
+              <path 
+                d="M7.5 9C5.57 9 4 10.57 4 12.5V17.5C4 20.5 6 23 9 23C10.5 23 11.8 21.8 11.8 20.2V18.5C11.8 17.67 12.47 17 13.3 17H18.7C19.53 17 20.2 17.67 20.2 18.5V20.2C20.2 21.8 21.5 23 23 23C26 23 28 20.5 28 17.5V12.5C28 10.57 26.43 9 24.5 9H7.5Z" 
+                fill="#1E293B" 
+                stroke="#334155" 
+                strokeWidth="1.2" 
+              />
+              {/* Shoulder Buttons */}
+              <path d="M7.5 9C7.5 7.6 9 6.5 11 6.5H12.5" stroke="#475569" strokeWidth="1.2" strokeLinecap="round" />
+              <path d="M24.5 9C24.5 7.6 23 6.5 21 6.5H19.5" stroke="#475569" strokeWidth="1.2" strokeLinecap="round" />
+
+              {/* D-Pad (Left side) */}
+              <rect x="7.5" y="13.2" width="2" height="5" rx="0.6" fill="#94A3B8" />
+              <rect x="6" y="14.7" width="5" height="2" rx="0.6" fill="#94A3B8" />
+
+              {/* Action Buttons (Right side - Y, B, A, X) */}
+              {/* Y - Yellow (Top) */}
+              <circle cx="23.5" cy="11.8" r="1.3" fill="#FACC15" />
+              {/* B - Red (Right) */}
+              <circle cx="25.8" cy="14.1" r="1.3" fill="#EF4444" />
+              {/* A - Green (Bottom) */}
+              <circle cx="23.5" cy="16.4" r="1.3" fill="#22C55E" />
+              {/* X - Blue (Left) */}
+              <circle cx="21.2" cy="14.1" r="1.3" fill="#3B82F6" />
+
+              {/* Joysticks / Analog Sticks */}
+              <circle cx="12" cy="19.2" r="2.1" fill="#0F172A" stroke="#38BDF8" strokeWidth="0.9" />
+              <circle cx="20" cy="19.2" r="2.1" fill="#0F172A" stroke="#F0ABFC" strokeWidth="0.9" />
+
+              {/* Center Home LED */}
+              <circle cx="16" cy="12.5" r="1" fill="#38BDF8" />
+            </svg>
           </div>
           COBRA GAMES JR
         </a>
@@ -56,15 +93,15 @@ const Navbar = () => {
 
 const HeroAndStats = () => (
   <div className="bg-blue-900 pt-20">
-    <section className="pt-20 pb-16 px-6 max-w-5xl mx-auto text-center">
-      <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-white mb-6 leading-tight">
+    <section className="pt-28 pb-24 px-6 max-w-6xl mx-auto text-center">
+      <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black tracking-tight text-white mb-8 leading-[1.1]">
         Jogos para celular que o <span className="text-blue-400">mundo inteiro joga</span>
       </h1>
-      <p className="text-lg md:text-xl text-blue-100 mb-10 max-w-3xl mx-auto leading-relaxed">
+      <p className="text-xl md:text-2xl text-blue-100 mb-12 max-w-4xl mx-auto leading-relaxed">
         A COBRA GAMES JR é uma editora de jogos casuais para dispositivos móveis, sediada no Brasil. De cobras famintas a plataformas que travam, nossos jogos já foram instalados mais vezes na Google Play.
       </p>
       <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a href="#jogos" className="bg-white hover:bg-blue-50 text-blue-900 rounded-full px-8 py-4 font-bold transition-all shadow-lg text-lg">
+        <a href="#jogos" className="bg-white hover:bg-blue-50 text-blue-900 rounded-full px-10 py-5 font-extrabold transition-all shadow-xl hover:shadow-2xl text-xl hover:scale-105">
           Explore nossos jogos
         </a>
       </div>
@@ -89,10 +126,23 @@ const HeroAndStats = () => (
   </div>
 );
 
-const FeaturedGames = ({ onOpenTurboRush }: { onOpenTurboRush: () => void }) => {
-  const handleOpenLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
+const FeaturedGames = ({ 
+  onOpenCobraProMax,
+  onOpenTurboRush, 
+  onOpenDeskRacer 
+}: { 
+  onOpenCobraProMax: () => void;
+  onOpenTurboRush: () => void; 
+  onOpenDeskRacer: () => void; 
+}) => {
+  const handleOpenTurboRushLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     onOpenTurboRush();
+  };
+
+  const handleOpenDeskRacerLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    onOpenDeskRacer();
   };
 
   return (
@@ -117,38 +167,46 @@ const FeaturedGames = ({ onOpenTurboRush }: { onOpenTurboRush: () => void }) => 
               </div>
             </div>
             <div className="text-sm font-bold text-emerald-600 mb-2 flex items-center gap-1">
-              <Download className="w-4 h-4" /> Mais de 500 milhões de downloads
+              <Download className="w-4 h-4" /> Mais 5 novos downloads
             </div>
             <h4 className="text-2xl font-bold text-slate-900 mb-3">Cobra Pro Max — Cobra Faminta</h4>
             <p className="text-slate-500 mb-8 leading-relaxed">
               Crie a minhoca mais comprida e faminta em uma arena multijogador vibrante. Um clássico do snake io reinventado — um dos nossos títulos mais jogados no mundo todo.
             </p>
           </div>
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2.5">
+            <button 
+              id="featured-play-btn-1"
+              type="button"
+              onClick={onOpenCobraProMax}
+              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Play className="w-5 h-5 fill-current" /> Jogar Cobra Pro Max
+            </button>
             <a 
               id="featured-download-btn-1"
               href="https://play.google.com/store/apps/details?id=com.aistudio.cobrapromax.game&pcampaignid=web_share"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full bg-slate-900 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors cursor-pointer"
+              className="w-full bg-slate-900 text-white rounded-xl py-2.5 font-semibold flex items-center justify-center gap-2 hover:bg-slate-800 transition-colors cursor-pointer text-xs sm:text-sm"
             >
-              <PlaySquare className="w-5 h-5" /> Google Play
+              <PlaySquare className="w-4 h-4" /> Google Play
             </a>
           </div>
         </div>
 
         {/* Card 2 */}
-        <div id="featured-game-card-2" className="bg-white border border-slate-100 rounded-3xl p-8 shadow-xl shadow-slate-200/40 transition-all hover:-translate-y-1 flex flex-col justify-between">
+        <div id="featured-game-card-2" className="bg-white border border-slate-100 rounded-3xl p-8 shadow-xl shadow-slate-200/40 transition-all duration-300 ease-out hover:scale-105 hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-200/50 flex flex-col justify-between">
           <div>
             <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6 overflow-hidden shadow-inner">
-              <Flame className="w-10 h-10 text-blue-600" />
+              <img src="/assets/aistudio/Turbo_Rush__Corrida_Urbana_ao_Entardecer_8d1f0ea0.png" alt="Turbo Rush" className="w-full h-full object-cover" />
             </div>
-            <div className="text-sm font-bold text-blue-600 mb-2 flex items-center gap-1">
-              <Download className="w-4 h-4" /> Mais de 500 milhões de downloads
+            <div className="text-sm font-bold text-red-500 mb-2 flex items-center gap-1">
+              <Download className="w-4 h-4" /> Mais de 500 milhões de downloads • Modo 3D
             </div>
-            <h4 id="featured-game-title-2" className="text-2xl font-bold text-slate-900 mb-3">Turbo Rush</h4>
+            <h4 id="featured-game-title-2" className="text-2xl font-bold text-slate-900 mb-3">Turbo Rush 3D — Supercarros</h4>
             <p className="text-slate-500 mb-8 leading-relaxed">
-              Desvie do tráfego intenso, colete moedas e ative seu turbo nitro para alcançar velocidades recordes em pistas de alta octanagem!
+              Pilote supercarros 3D de alto padrão como Ferrari, Lamborghini, Porsche, Bugatti e McLaren! Escolha pinturas metálicas exclusivas, desvie do tráfego em alta velocidade e ative o nitro turbo!
             </p>
           </div>
           <div className="flex flex-col gap-3">
@@ -157,14 +215,42 @@ const FeaturedGames = ({ onOpenTurboRush }: { onOpenTurboRush: () => void }) => 
               href="/turbo-rush.html"
               target="_blank"
               rel="noopener noreferrer"
-              onClick={handleOpenLink}
+              onClick={handleOpenTurboRushLink}
               className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-lg shadow-blue-600/20"
             >
               <Play className="w-5 h-5 fill-current" /> Jogar Turbo Rush
             </a>
-            <div className="text-xs text-slate-500 text-center flex items-center justify-center gap-1">
-              <span>Clique para abrir e jogar diretamente</span>
+          </div>
+        </div>
+
+        {/* Card 3 (Desk Racer) */}
+        <div id="featured-game-card-3" className="relative bg-white border border-slate-100 rounded-3xl p-8 shadow-xl shadow-slate-200/40 transition-all duration-300 ease-out hover:scale-105 hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-200/50 flex flex-col justify-between">
+          <div className="absolute top-4 right-4 inline-flex items-center px-3 py-1 bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-full text-xs font-black tracking-wide shadow-lg shadow-blue-500/30 animate-pulse">
+            Lançamento
+          </div>
+          <div>
+            <div className="w-20 h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-6 overflow-hidden shadow-inner">
+              <img src={deskRacerImage} alt="Desk Racer" className="w-full h-full object-cover" />
             </div>
+            <div className="text-sm font-bold text-blue-500 mb-2 flex items-center gap-1">
+              <Download className="w-4 h-4" /> Novo • Corrida de Mesa 3D
+            </div>
+            <h4 id="featured-game-title-3" className="text-2xl font-bold text-slate-900 mb-3">Desk Racer</h4>
+            <p className="text-slate-500 mb-8 leading-relaxed">
+              Corrida de kart em miniatura em circuitos de mesa com física realista e visuais vibrantes!
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <a 
+              id="featured-download-btn-3"
+              href="/deskracer/index.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={handleOpenDeskRacerLink}
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-lg shadow-blue-600/20"
+            >
+              <Play className="w-5 h-5 fill-current" /> Jogar Desk Racer
+            </a>
           </div>
         </div>
       </div>
@@ -172,37 +258,86 @@ const FeaturedGames = ({ onOpenTurboRush }: { onOpenTurboRush: () => void }) => 
   );
 };
 
-const OtherGames = () => (
-  <section className="py-24 px-6 max-w-7xl mx-auto border-t border-slate-100">
-    <div className="mb-12 md:flex items-end justify-between">
-      <div className="max-w-2xl">
-        <h2 className="text-blue-600 font-bold tracking-wide uppercase text-sm mb-3">Mais conteúdo do nosso estúdio</h2>
-        <h3 className="text-3xl font-bold text-slate-900 mb-4">Um portfólio que os jogadores adoram.</h3>
-        <p className="text-lg text-slate-500">
-          Uma seleção dos nossos títulos de maior sucesso. Encontre o catálogo completo nas nossas páginas de desenvolvedor na Google Play e na App Store.
-        </p>
-      </div>
-    </div>
+const OtherGames = () => {
+  const [activeCategory, setActiveCategory] = useState('Todos');
+  const [searchQuery, setSearchQuery] = useState('');
+  const categories = ['Todos', 'Ação', 'Casual', 'Corrida'];
+  
+  const filteredGames = otherGames.filter(game => {
+    const matchesCategory = activeCategory === 'Todos' || game.category === activeCategory;
+    const matchesSearch = game.title.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {otherGames.map((game, idx) => (
-        <div key={idx} className="group p-5 rounded-2xl border border-slate-100 hover:border-blue-100 hover:shadow-lg hover:shadow-blue-50/50 transition-all bg-white flex items-start gap-4">
-          <div className="w-14 h-14 bg-slate-50 rounded-xl flex items-center justify-center flex-shrink-0 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-            <Gamepad2 className="w-7 h-7" />
-          </div>
-          <div>
-            <h4 className="font-bold text-slate-900 mb-1 line-clamp-1">{game.title}</h4>
-            <div className="text-sm text-slate-500 font-medium mb-3">{game.stats}</div>
-            <div className="flex gap-2">
-              <span className="text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1"><PlaySquare className="w-3 h-3"/> Google Play</span>
-              <span className="text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1"><Apple className="w-3 h-3"/> App Store</span>
-            </div>
-          </div>
+  return (
+    <section className="py-24 px-6 max-w-7xl mx-auto border-t border-slate-100">
+      <div className="mb-12 md:flex items-end justify-between">
+        <div className="max-w-2xl">
+          <h2 className="text-blue-600 font-bold tracking-wide uppercase text-sm mb-3">Mais conteúdo do nosso estúdio</h2>
+          <h3 className="text-3xl font-bold text-slate-900 mb-4">Um portfólio que os jogadores adoram.</h3>
+          <p className="text-lg text-slate-500">
+            Uma seleção dos nossos títulos de maior sucesso. Encontre o catálogo completo nas nossas páginas de desenvolvedor na Google Play e na App Store.
+          </p>
         </div>
-      ))}
-    </div>
-  </section>
-);
+      </div>
+
+      <div className="flex flex-col md:flex-row gap-4 mb-8">
+        <input
+          type="text"
+          placeholder="Pesquisar jogos..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="flex-1 px-4 py-2 rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
+          {categories.map(category => (
+            <button
+              key={category}
+              onClick={() => setActiveCategory(category)}
+              className={`px-4 py-2 rounded-full font-bold transition-all whitespace-nowrap ${
+                activeCategory === category 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredGames.length > 0 ? (
+          filteredGames.map((game, idx) => (
+            <motion.div 
+              key={idx} 
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: idx * 0.1 }}
+              className="group p-5 rounded-2xl border border-slate-100 hover:border-blue-100 hover:shadow-lg hover:shadow-blue-50/50 transition-all bg-white flex items-start gap-4"
+            >
+              <div className="w-14 h-14 bg-slate-50 rounded-xl flex items-center justify-center flex-shrink-0 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                <Gamepad2 className="w-7 h-7" />
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900 mb-1 line-clamp-1">{game.title}</h4>
+                <div className="text-sm text-slate-500 font-medium mb-1">{game.stats}</div>
+                <div className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md inline-block">{game.category}</div>
+                <div className="flex gap-2 mt-2">
+                  <span className="text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1"><PlaySquare className="w-3 h-3"/> Google Play</span>
+                  <span className="text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1"><Apple className="w-3 h-3"/> App Store</span>
+                </div>
+              </div>
+            </motion.div>
+          ))
+        ) : (
+          <p className="text-center text-slate-500 py-10 col-span-full">Nenhum jogo encontrado para esta pesquisa.</p>
+        )}
+      </div>
+    </section>
+  );
+};
 
 
 const ContactAndFooter = ({
@@ -428,7 +563,9 @@ const ContactAndFooter = ({
 };
 
 export default function App() {
+  const [isCobraProMaxOpen, setIsCobraProMaxOpen] = useState(false);
   const [isTurboRushOpen, setIsTurboRushOpen] = useState(false);
+  const [isDeskRacerOpen, setIsDeskRacerOpen] = useState(false);
   const [isCookiePolicyOpen, setIsCookiePolicyOpen] = useState(false);
   const [isPrivacyPolicyOpen, setIsPrivacyPolicyOpen] = useState(false);
   const [isTermsOfUseOpen, setIsTermsOfUseOpen] = useState(false);
@@ -473,7 +610,11 @@ export default function App() {
       <Navbar />
       <main>
         <HeroAndStats />
-        <FeaturedGames onOpenTurboRush={() => setIsTurboRushOpen(true)} />
+        <FeaturedGames 
+          onOpenCobraProMax={() => setIsCobraProMaxOpen(true)}
+          onOpenTurboRush={() => setIsTurboRushOpen(true)} 
+          onOpenDeskRacer={() => setIsDeskRacerOpen(true)} 
+        />
       </main>
       <ContactAndFooter 
         onOpenCookiePolicy={() => setIsCookiePolicyOpen(true)}
@@ -482,10 +623,22 @@ export default function App() {
         onOpenTermsOfUse={() => setIsTermsOfUseOpen(true)}
       />
       
+      {/* Cobra Pro Max Game Modal */}
+      <CobraProMaxModal 
+        isOpen={isCobraProMaxOpen} 
+        onClose={() => setIsCobraProMaxOpen(false)} 
+      />
+
       {/* Turbo Rush Game Modal */}
       <TurboRushModal 
         isOpen={isTurboRushOpen} 
         onClose={() => setIsTurboRushOpen(false)} 
+      />
+
+      {/* Desk Racer Game Modal */}
+      <DeskRacerModal 
+        isOpen={isDeskRacerOpen} 
+        onClose={() => setIsDeskRacerOpen(false)} 
       />
 
       {/* Complete Cookie Policy Modal */}
