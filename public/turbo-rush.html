@@ -14,90 +14,106 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0c16; f
 #canvas-3d { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; display: block; }
 
 /* Overlay screens */
-.ui-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 24px 16px; background: rgba(10, 12, 22, 0.75); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+.ui-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 14px; padding: 16px 12px 32px; background: rgba(10, 12, 22, 0.82); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); opacity: 0; pointer-events: none; transition: opacity 0.3s ease; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .ui-screen.active { opacity: 1; pointer-events: auto; }
 
 /* Menu Header & Logo */
-.brand-header { text-align: center; margin-top: 10px; }
-.brand-title { font-size: 38px; font-weight: 900; letter-spacing: -1px; background: linear-gradient(135deg, #fff 0%, #7bbfff 50%, #378ADD 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-transform: uppercase; text-shadow: 0 10px 30px rgba(55,138,221,0.4); }
-.brand-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px; background: rgba(230, 0, 18, 0.2); border: 1px solid rgba(230, 0, 18, 0.5); border-radius: 20px; color: #ff4d4d; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+.brand-header { text-align: center; margin-top: 6px; flex-shrink: 0; }
+.brand-title { font-size: clamp(24px, 5.5vw, 38px); font-weight: 900; letter-spacing: -1px; background: linear-gradient(135deg, #fff 0%, #7bbfff 50%, #378ADD 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-transform: uppercase; text-shadow: 0 10px 30px rgba(55,138,221,0.4); }
+.brand-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px; background: rgba(230, 0, 18, 0.2); border: 1px solid rgba(230, 0, 18, 0.5); border-radius: 20px; color: #ff4d4d; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
 
 /* Showroom Selection Cards */
-.showroom-panel { width: 100%; max-width: 680px; background: rgba(22, 33, 62, 0.85); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; padding: 18px 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); display: flex; flex-direction: column; gap: 16px; }
+.showroom-panel { width: 100%; max-width: 680px; background: rgba(22, 33, 62, 0.85); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 24px; padding: 14px 16px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); display: flex; flex-direction: column; gap: 12px; flex-shrink: 0; }
 
-.section-title { font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #8a99ad; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+.section-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #8a99ad; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
 
 /* Supercar Selector Carousel */
-.car-selector { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
+.car-selector { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .car-selector::-webkit-scrollbar { display: none; }
 
-.car-card { flex: 0 0 120px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 10px; cursor: pointer; text-align: center; transition: all 0.2s ease; }
+.car-card { flex: 0 0 110px; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 8px; cursor: pointer; text-align: center; transition: all 0.2s ease; }
 .car-card:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); }
 .car-card.active { border-color: #378ADD; background: rgba(55,138,221,0.25); box-shadow: 0 0 20px rgba(55,138,221,0.4); }
-.car-card-name { font-size: 13px; font-weight: 800; color: #fff; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.car-card-brand { font-size: 10px; color: #7bbfff; font-weight: 700; text-transform: uppercase; }
+.car-card-name { font-size: 12px; font-weight: 800; color: #fff; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.car-card-brand { font-size: 9px; color: #7bbfff; font-weight: 700; text-transform: uppercase; }
 
 /* Color Swatches */
-.color-picker { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-.color-swatch { width: 34px; height: 34px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: transform 0.15s ease, border-color 0.15s ease; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+.color-picker { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.color-swatch { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: transform 0.15s ease, border-color 0.15s ease; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
 .color-swatch:hover { transform: scale(1.15); }
 .color-swatch.active { border-color: #ffffff; transform: scale(1.2); box-shadow: 0 0 15px rgba(255,255,255,0.8); }
 
 /* Difficulty Selector */
 .diff-selector { display: flex; gap: 8px; }
-.diff-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #a0aec0; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; }
+.diff-btn { flex: 1; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #a0aec0; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; }
 .diff-btn.active { background: #378ADD; color: #fff; border-color: #378ADD; box-shadow: 0 0 15px rgba(55,138,221,0.4); }
 
 /* Buttons */
-.btn-primary { width: 100%; max-width: 320px; padding: 16px 32px; border-radius: 16px; border: none; background: linear-gradient(135deg, #e60012 0%, #ff4d4d 100%); color: #fff; font-size: 18px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; box-shadow: 0 10px 30px rgba(230,0,18,0.5); transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.btn-primary { width: 100%; max-width: 320px; padding: 14px 28px; border-radius: 16px; border: none; background: linear-gradient(135deg, #e60012 0%, #ff4d4d 100%); color: #fff; font-size: 16px; font-weight: 900; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; box-shadow: 0 10px 30px rgba(230,0,18,0.5); transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 10px; flex-shrink: 0; margin-bottom: 12px; }
 .btn-primary:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 15px 40px rgba(230,0,18,0.7); }
 .btn-primary:active { transform: translateY(1px); }
 
 /* HUD Header */
-#hud-container { position: absolute; top: 0; left: 0; width: 100%; z-index: 5; pointer-events: none; padding: 16px 20px; display: none; justify-content: space-between; align-items: flex-start; }
+#hud-container { position: absolute; top: 0; left: 0; width: 100%; z-index: 5; pointer-events: none; padding: 12px 14px; display: none; justify-content: space-between; align-items: flex-start; }
 #hud-container.active { display: flex; }
 
-.hud-panel { background: rgba(10, 12, 22, 0.65); border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(8px); border-radius: 16px; padding: 10px 18px; display: flex; align-items: center; gap: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.hud-panel { background: rgba(10, 12, 22, 0.75); border: 1px solid rgba(255,255,255,0.12); backdrop-filter: blur(8px); border-radius: 14px; padding: 8px 12px; display: flex; align-items: center; gap: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
 .hud-stat { display: flex; flex-direction: column; }
-.hud-label { font-size: 10px; font-weight: 800; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; }
-.hud-val { font-size: 20px; font-weight: 900; color: #fff; line-height: 1.1; }
+.hud-label { font-size: 9px; font-weight: 800; color: #718096; text-transform: uppercase; letter-spacing: 0.5px; }
+.hud-val { font-size: 18px; font-weight: 900; color: #fff; line-height: 1.1; }
 
-.hud-lives { display: flex; gap: 4px; }
-.hud-heart { font-size: 18px; color: #e60012; text-shadow: 0 0 10px rgba(230,0,18,0.6); }
+.hud-lives { display: flex; gap: 3px; }
+.hud-heart { font-size: 16px; color: #e60012; text-shadow: 0 0 10px rgba(230,0,18,0.6); }
 .hud-heart.lost { color: #333d4d; text-shadow: none; }
 
 /* Speedometer & Nitro Bar */
 .hud-speedo { text-align: right; }
-.speedo-num { font-size: 28px; font-weight: 900; color: #378ADD; letter-spacing: -1px; text-shadow: 0 0 20px rgba(55,138,221,0.6); }
-.speedo-unit { font-size: 11px; font-weight: 800; color: #a0aec0; }
+.speedo-num { font-size: clamp(20px, 4.5vw, 26px); font-weight: 900; color: #378ADD; letter-spacing: -1px; text-shadow: 0 0 20px rgba(55,138,221,0.6); }
+.speedo-unit { font-size: 10px; font-weight: 800; color: #a0aec0; }
 
-.nitro-bar-wrap { width: 120px; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 4px; border: 1px solid rgba(255,255,255,0.15); }
+.nitro-bar-wrap { width: clamp(80px, 20vw, 110px); height: 7px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 3px; border: 1px solid rgba(255,255,255,0.15); }
 .nitro-bar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #0055ff, #00d4ff, #ff00ea); border-radius: 4px; transition: width 0.1s linear; box-shadow: 0 0 10px #00d4ff; }
 
 /* Game Controls Bar (Touch / Mobile / Desktop overlay) */
-#controls-bar { position: absolute; bottom: 20px; left: 0; width: 100%; z-index: 6; pointer-events: auto; display: none; justify-content: space-between; align-items: center; padding: 0 20px; }
+#controls-bar { 
+  position: absolute; 
+  bottom: max(16px, env(safe-area-inset-bottom, 16px)); 
+  left: 0; 
+  width: 100%; 
+  z-index: 6; 
+  pointer-events: auto; 
+  display: none; 
+  justify-content: space-between; 
+  align-items: center; 
+  padding: 0 16px; 
+}
 #controls-bar.active { display: flex; }
 
-.ctrl-btn { width: 62px; height: 62px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1); backdrop-filter: blur(6px); color: #fff; font-size: 24px; font-weight: 900; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.1s ease; touch-action: manipulation; box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+.ctrl-btn { width: 56px; height: 56px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.12); backdrop-filter: blur(6px); color: #fff; font-size: 22px; font-weight: 900; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.1s ease; touch-action: manipulation; box-shadow: 0 8px 20px rgba(0,0,0,0.5); user-select: none; }
 .ctrl-btn:active, .ctrl-btn.pressed { background: rgba(55,138,221,0.5); border-color: #378ADD; transform: scale(0.92); }
 
-.ctrl-btn-nitro { width: 74px; height: 74px; border-radius: 20px; background: linear-gradient(135deg, #0055ff, #ff00ea); border: 2px solid rgba(255,255,255,0.4); box-shadow: 0 0 25px rgba(255,0,234,0.6); font-size: 13px; font-weight: 900; letter-spacing: 1px; flex-direction: column; gap: 2px; }
+.ctrl-btn-nitro { width: 66px; height: 66px; border-radius: 18px; background: linear-gradient(135deg, #0055ff, #ff00ea); border: 2px solid rgba(255,255,255,0.4); box-shadow: 0 0 25px rgba(255,0,234,0.6); font-size: 11px; font-weight: 900; letter-spacing: 0.5px; flex-direction: column; gap: 2px; }
 
-.ctrl-group { display: flex; gap: 12px; align-items: center; }
+.ctrl-group { display: flex; gap: 10px; align-items: center; }
 
 /* Game Over Modal */
-.gameover-box { width: 100%; max-width: 440px; background: rgba(16, 22, 40, 0.9); border: 1px solid rgba(255,255,255,0.15); border-radius: 28px; padding: 28px; text-align: center; box-shadow: 0 30px 60px rgba(0,0,0,0.8); display: flex; flex-direction: column; align-items: center; gap: 18px; }
-.go-title { font-size: 36px; font-weight: 900; color: #ff4d4d; letter-spacing: -1px; text-shadow: 0 0 20px rgba(255,77,77,0.5); }
-.go-stats { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0; }
-.go-stat-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 12px; }
-.go-stat-val { font-size: 22px; font-weight: 900; color: #fff; }
-.go-stat-lbl { font-size: 11px; color: #8a99ad; font-weight: 700; text-transform: uppercase; }
+.gameover-box { width: 100%; max-width: 440px; background: rgba(16, 22, 40, 0.95); border: 1px solid rgba(255,255,255,0.15); border-radius: 28px; padding: 24px; text-align: center; box-shadow: 0 30px 60px rgba(0,0,0,0.8); display: flex; flex-direction: column; align-items: center; gap: 16px; margin: auto; }
+.go-title { font-size: 32px; font-weight: 900; color: #ff4d4d; letter-spacing: -1px; text-shadow: 0 0 20px rgba(255,77,77,0.5); }
+.go-stats { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0; }
+.go-stat-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px; }
+.go-stat-val { font-size: 20px; font-weight: 900; color: #fff; }
+.go-stat-lbl { font-size: 10px; color: #8a99ad; font-weight: 700; text-transform: uppercase; }
 
 /* Ads Banner */
 .ads-wrapper { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); z-index: 20; width: 100%; max-width: 400px; text-align: center; pointer-events: auto; }
 </style>
-<!-- Three.js CDN -->
+<!-- Three.js CDN with local fallback -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+  if (typeof THREE === 'undefined') {
+    document.write('<script src="/three.min.js"><\/script>');
+  }
+</script>
 </head>
 <body>
 
@@ -668,7 +684,11 @@ function init3DScene() {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.outputEncoding = THREE.sRGBEncoding;
+  if ('outputColorSpace' in renderer && THREE.SRGBColorSpace) {
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+  } else if ('outputEncoding' in renderer && THREE.sRGBEncoding) {
+    renderer.outputEncoding = THREE.sRGBEncoding;
+  }
 
   clock = new THREE.Clock();
 
@@ -1146,6 +1166,9 @@ document.addEventListener('keyup', e => {
   if (['ArrowUp', 'w', 'W', ' '].includes(e.key)) {
     gameState.isBoosting = false;
   }
+  if (['ArrowDown', 's', 'S'].includes(e.key)) {
+    gameState.targetSpeed = DIFFICULTY_SETTINGS[selectedDifficulty].speedMul;
+  }
 });
 
 // Touch / On-screen Buttons
@@ -1154,14 +1177,54 @@ const btnRight = document.getElementById('ctrl-right');
 const btnNitro = document.getElementById('ctrl-nitro');
 const btnBrake = document.getElementById('ctrl-brake');
 
-btnLeft.addEventListener('pointerdown', e => { e.preventDefault(); if (gameState.playerLane > 0) gameState.playerLane--; });
-btnRight.addEventListener('pointerdown', e => { e.preventDefault(); if (gameState.playerLane < 4) gameState.playerLane++; });
+btnLeft.addEventListener('pointerdown', e => { e.preventDefault(); AudioFX.init(); if (gameState.playerLane > 0) gameState.playerLane--; });
+btnRight.addEventListener('pointerdown', e => { e.preventDefault(); AudioFX.init(); if (gameState.playerLane < 4) gameState.playerLane++; });
 
-btnNitro.addEventListener('pointerdown', e => { e.preventDefault(); gameState.isBoosting = true; });
+btnNitro.addEventListener('pointerdown', e => { e.preventDefault(); AudioFX.init(); gameState.isBoosting = true; });
 btnNitro.addEventListener('pointerup', e => { e.preventDefault(); gameState.isBoosting = false; });
 btnNitro.addEventListener('pointerleave', e => { gameState.isBoosting = false; });
+btnNitro.addEventListener('pointercancel', e => { gameState.isBoosting = false; });
 
-btnBrake.addEventListener('pointerdown', e => { e.preventDefault(); gameState.targetSpeed = 0.3; });
+btnBrake.addEventListener('pointerdown', e => { e.preventDefault(); AudioFX.init(); gameState.targetSpeed = 0.3; });
+const releaseBrake = () => { gameState.targetSpeed = DIFFICULTY_SETTINGS[selectedDifficulty].speedMul; };
+btnBrake.addEventListener('pointerup', releaseBrake);
+btnBrake.addEventListener('pointerleave', releaseBrake);
+btnBrake.addEventListener('pointercancel', releaseBrake);
+
+// Canvas Direct Touch Gestures (Swipe left/right to steer, tap sides, swipe up for nitro)
+let touchStartX = 0;
+let touchStartY = 0;
+const canvasEl = document.getElementById('canvas-3d');
+
+canvasEl.addEventListener('touchstart', e => {
+  if (!isGameRunning) return;
+  AudioFX.init();
+  if (e.touches.length > 0) {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }
+}, { passive: true });
+
+canvasEl.addEventListener('touchend', e => {
+  if (!isGameRunning) return;
+  if (e.changedTouches.length > 0) {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(dx) > 28) {
+      if (dx < 0 && gameState.playerLane > 0) gameState.playerLane--;
+      else if (dx > 0 && gameState.playerLane < 4) gameState.playerLane++;
+    } else if (dy < -35) {
+      gameState.isBoosting = true;
+      setTimeout(() => { gameState.isBoosting = false; }, 700);
+    } else if (Math.abs(dx) < 20 && Math.abs(dy) < 20) {
+      if (touchStartX < window.innerWidth * 0.45 && gameState.playerLane > 0) {
+        gameState.playerLane--;
+      } else if (touchStartX > window.innerWidth * 0.55 && gameState.playerLane < 4) {
+        gameState.playerLane++;
+      }
+    }
+  }
+}, { passive: true });
 
 // Menu Navigation
 document.getElementById('btn-start').onclick = startGame;

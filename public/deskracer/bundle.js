@@ -49786,7 +49786,7 @@ var QI;
 var BI = 0;
 async function EI(A2) {
   if (void 0 !== QI) return QI;
-  void 0 !== A2 && (Object.getPrototypeOf(A2) === Object.prototype ? { module_or_path: A2 } = A2 : console.warn("using deprecated parameters for the initialization function; pass a single object instead")), void 0 === A2 && (A2 = new URL("rapier_wasm3d_bg.wasm", "<deleted>"));
+  void 0 !== A2 && (Object.getPrototypeOf(A2) === Object.prototype ? { module_or_path: A2 } = A2 : console.warn("using deprecated parameters for the initialization function; pass a single object instead")), void 0 === A2 && (A2 = "/deskracer/rapier_wasm3d_bg.wasm");
   const I2 = /* @__PURE__ */ (function() {
     const A3 = { __proto__: null, __wbg___wbindgen_boolean_get_5b446f51afd21013: function(A4) {
       const I3 = VA(A4), g3 = "boolean" == typeof I3 ? I3 : void 0;
@@ -49864,6 +49864,9 @@ async function EI(A2) {
   ("string" == typeof A2 || "function" == typeof Request && A2 instanceof Request || "function" == typeof URL && A2 instanceof URL) && (A2 = fetch(A2));
   const { instance: g2, module: C2 } = await (async function(A3, I3) {
     if ("function" == typeof Response && A3 instanceof Response) {
+      if (!A3.ok) {
+        try { const fb = await fetch("/rapier_wasm3d_bg.wasm"); if (fb.ok) A3 = fb; } catch(_e) {}
+      }
       if (!A3.ok) throw new Error(`failed to fetch Wasm: ${A3.status} ${A3.statusText} fetching '${A3.url}'`);
       if ("function" == typeof WebAssembly.instantiateStreaming) try {
         return await WebAssembly.instantiateStreaming(A3, I3);
