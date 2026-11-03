@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Menu, X, Download, MapPin, Mail, Gamepad2, Apple, PlaySquare, Play, Trophy } from 'lucide-react';
+import { Menu, X, Download, MapPin, Mail, Gamepad2, Apple, PlaySquare, Play, Trophy, ExternalLink } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { otherGames } from './data';
 import wormIcon from './assets/images/regenerated_image_1788833588389.jpg';
@@ -130,11 +130,13 @@ const HeroAndStats = () => (
 const FeaturedGames = ({ 
   onOpenCobraProMax,
   onOpenTurboRush, 
-  onOpenDeskRacer
+  onOpenDeskRacer,
+  onOpenKled,
 }: { 
   onOpenCobraProMax: () => void;
   onOpenTurboRush: () => void; 
-  onOpenDeskRacer: () => void; 
+  onOpenDeskRacer: () => void;
+  onOpenKled: () => void;
 }) => {
   const handleOpenTurboRushLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
@@ -144,6 +146,11 @@ const FeaturedGames = ({
   const handleOpenDeskRacerLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     onOpenDeskRacer();
+  };
+
+  const handleOpenKledLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    onOpenKled();
   };
 
   return (
@@ -243,6 +250,46 @@ const FeaturedGames = ({
               className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-lg shadow-blue-600/20"
             >
               <Play className="w-5 h-5 fill-current" /> Jogar Desk Racer
+            </a>
+          </div>
+        </div>
+
+        {/* Card 5 (Kled 3D — Cavaleiro da Batalha / AI Studio) */}
+        <div id="featured-game-card-5" className="relative bg-white border border-amber-100 rounded-3xl p-8 shadow-xl shadow-slate-200/40 transition-all duration-300 ease-out hover:scale-105 hover:-translate-y-1 hover:shadow-2xl hover:shadow-amber-200/50 flex flex-col justify-between">
+          <div className="absolute top-4 right-4 inline-flex items-center px-3 py-1 bg-gradient-to-r from-amber-600 to-orange-500 text-white rounded-full text-xs font-black tracking-wide shadow-lg shadow-amber-500/30 animate-pulse">
+            ★ Lançamento 3D
+          </div>
+          <div>
+            <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mb-6 overflow-hidden shadow-inner">
+              <img src={kledImage} alt="Kled 3D" className="w-full h-full object-cover" />
+            </div>
+            <div className="text-sm font-bold text-amber-600 mb-2 flex items-center gap-1">
+              <Download className="w-4 h-4" /> Novo • Combate de Arena 3D
+            </div>
+            <h4 id="featured-game-title-5" className="text-2xl font-bold text-slate-900 mb-3">Kled 3D — Cavaleiro da Batalha</h4>
+            <p className="text-slate-500 mb-8 leading-relaxed">
+              Monte no réptil veloz Skaarl, empunhe o machado lendário e lute em uma arena épica 3D cheia de ação, fúria e ondas de inimigos!
+            </p>
+          </div>
+          <div className="flex flex-col gap-2.5">
+            <a 
+              id="featured-download-btn-5"
+              href="https://ai.studio/apps/80559be3-4bce-429d-a28d-b3b88a5131f8?fullscreenApplet=true"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={handleOpenKledLink}
+              className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl py-3 font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-amber-600/25 hover:shadow-amber-600/40 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Play className="w-5 h-5 fill-current" /> Jogar Kled 3D
+            </a>
+            <a 
+              id="featured-applet-link-5"
+              href="https://ai.studio/apps/80559be3-4bce-429d-a28d-b3b88a5131f8?fullscreenApplet=true"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl py-2 font-medium flex items-center justify-center gap-1.5 transition-colors text-xs"
+            >
+              <ExternalLink className="w-3.5 h-3.5" /> Abrir no AI Studio
             </a>
           </div>
         </div>
@@ -636,7 +683,8 @@ export default function App() {
         <FeaturedGames 
           onOpenCobraProMax={() => setIsCobraProMaxOpen(true)}
           onOpenTurboRush={() => setIsTurboRushOpen(true)} 
-          onOpenDeskRacer={() => setIsDeskRacerOpen(true)} 
+          onOpenDeskRacer={() => setIsDeskRacerOpen(true)}
+          onOpenKled={() => setIsKledOpen(true)}
         />
       </main>
       <ContactAndFooter 

@@ -51,13 +51,14 @@ export const KledModal: React.FC<KledModalProps> = ({ isOpen, onClose }) => {
 
           <div className="flex items-center gap-1.5 sm:gap-2">
             <a
-              href="/kled-3d.html"
+              href="https://ai.studio/apps/80559be3-4bce-429d-a28d-b3b88a5131f8?fullscreenApplet=true"
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              title="Abrir em uma nova aba"
+              className="px-3 py-1.5 rounded-xl text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 transition-colors flex items-center gap-1.5 text-xs font-bold"
+              title="Abrir Applet Oficial no AI Studio"
             >
-              <ExternalLink className="w-4 h-4" />
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Applet AI Studio</span>
             </a>
 
             <button
