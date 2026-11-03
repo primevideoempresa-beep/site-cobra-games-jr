@@ -85,7 +85,7 @@ function computeCrispRegimeWeights(f0) {
  */
 export function createDeskRacerHybridAudio(options = {}) {
   const baseUrl = (options.baseUrl || '/assets/audio').replace(/\/$/, '');
-  const masterVolume = options.masterVolume ?? 0.28;
+  const masterVolume = options.masterVolume ?? 0.35;
   const cacheBust = options.cacheBust || 'v=8';
 
   let ctx = null;
@@ -635,10 +635,10 @@ export function createDeskRacerHybridAudio(options = {}) {
         decel: Number(wDecel.toFixed(2)),
         f1Boost: Number(wBoost.toFixed(2)),
         rumble: Number(Math.min(
-                               1.0,
-                               userRumbleAmount *
-                                   (0.65 + 0.25 * Math.min(1.0, clampedNorm)))
-                           .toFixed(2)),
+                                1.0,
+                                userRumbleAmount *
+                                    (0.65 + 0.25 * Math.min(1.0, clampedNorm)))
+                            .toFixed(2)),
         drift: Number(targetDriftGain.toFixed(2)),
         curb: Number(targetCurbGain.toFixed(2)),
       },

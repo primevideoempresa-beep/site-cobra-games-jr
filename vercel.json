@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/admin/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/((?!api|assets|deskracer|.*\\..*).*)",
+      "destination": "/index.html"
+    }
+  ]
+}

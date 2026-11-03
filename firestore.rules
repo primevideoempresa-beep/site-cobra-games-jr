@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'primevideoempresa@gmail.com';
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Visitors collection
+    match /visitors/{visitorId} {
+      allow create: if true; // Anyone can start tracking
+      allow update: if true; // Anyone can update their own lastVisit (simple for now)
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+    }
+
+    // Sessions collection
+    match /sessions/{sessionId} {
+      allow create: if true;
+      allow update: if true;
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+    }
+
+    // Events collection
+    match /events/{eventId} {
+      allow create: if true;
+      allow get: if isAdmin();
+      allow list: if isAdmin();
+    }
+
+    // Daily stats (optional pre-aggregation)
+    match /daily_stats/{date} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Game stats
+    match /game_stats/{gameId} {
+      allow read: if isAdmin();
+      allow write: if true; // Allowed so anyone can increment clicks/opens
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "Visitor": {
+      "title": "Visitor",
+      "description": "An anonymous visitor profile.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "firstVisit": { "type": "string", "format": "date-time" },
+        "lastVisit": { "type": "string", "format": "date-time" },
+        "userAgent": { "type": "string" },
+        "device": { "type": "string" },
+        "browser": { "type": "string" },
+        "region": { "type": "string" },
+        "country": { "type": "string" }
+      },
+      "required": ["id", "firstVisit", "lastVisit"]
+    },
+    "Session": {
+      "title": "Session",
+      "description": "A visitor session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "visitorId": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "lastActive": { "type": "string", "format": "date-time" },
+        "device": { "type": "string" },
+        "browser": { "type": "string" }
+      },
+      "required": ["id", "visitorId", "startTime"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "A specific action taken by a visitor.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "visitorId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "type": { "type": "string", "enum": ["page_view", "game_click", "game_open", "game_download"] },
+        "page": { "type": "string" },
+        "gameId": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["id", "visitorId", "type", "timestamp"]
+    },
+    "DailyStats": {
+      "title": "Daily Stats",
+      "description": "Pre-aggregated statistics for a specific day.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "totalVisitors": { "type": "integer" },
+        "totalViews": { "type": "integer" },
+        "gameClicks": { "type": "object" }
+      },
+      "required": ["date"]
+    }
+  },
+  "firestore": {
+    "/visitors/{visitorId}": {
+      "schema": "Visitor",
+      "description": "Collection of anonymous visitors."
+    },
+    "/sessions/{sessionId}": {
+      "schema": "Session",
+      "description": "Collection of visitor sessions."
+    },
+    "/events/{eventId}": {
+      "schema": "Event",
+      "description": "Collection of analytics events."
+    },
+    "/daily_stats/{date}": {
+      "schema": "DailyStats",
+      "description": "Aggregated stats per day."
+    }
+  }
+}

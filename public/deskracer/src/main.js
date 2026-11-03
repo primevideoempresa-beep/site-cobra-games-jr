@@ -789,7 +789,7 @@ async function initApp() {
     });
   }
 
-  const audioSynth = createWebAudioSynth();
+  const audioSynth = createWebAudioSynth({ baseUrl: '/deskracer/assets/audio' });
   if (audioSynth.preload) {
     audioSynth.preload().finally(() => {
       audioPreloadProgress = 1.0;

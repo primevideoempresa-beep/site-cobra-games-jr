@@ -3,9 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
-import { Menu, X, Download, MapPin, Mail, Gamepad2, Apple, PlaySquare, Play, Trophy, ExternalLink } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Menu, X, Download, MapPin, Mail, Gamepad2, Apple, PlaySquare, Play, Trophy, ExternalLink, ShieldCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { Routes, Route, useNavigate, useLocation, Link } from 'react-router-dom';
+import { useAuth } from './context/AuthContext';
+import { AnalyticsService } from './services/analytics';
+import { AdminPage } from './pages/Admin/AdminPage';
+import { AdminLoginPage } from './pages/Admin/AdminLoginPage';
 import { otherGames } from './data';
 import wormIcon from './assets/images/regenerated_image_1788833588389.jpg';
 import kledImage from './assets/images/kled_3d_render_1793497542465.jpg';
@@ -67,6 +72,8 @@ const Navbar = () => {
         {/* Desktop */}
         <div className="hidden md:flex items-center gap-8">
           <a href="#jogos" className="text-blue-100 hover:text-white font-medium transition-colors">Jogos</a>
+          <a href="#contatos" className="text-blue-100 hover:text-white font-medium transition-colors">Contato</a>
+          <AdminButton />
           <a href="#contatos" className="bg-white hover:bg-blue-50 text-blue-900 rounded-full px-5 py-2.5 font-bold transition-colors">
             Entre em contato
           </a>
@@ -83,12 +90,24 @@ const Navbar = () => {
         <div className="md:hidden border-t border-blue-800 bg-blue-900 px-6 py-6 space-y-4 shadow-xl">
           <a href="#jogos" onClick={() => setIsOpen(false)} className="block text-white font-medium">Jogos</a>
           <a href="#contatos" onClick={() => setIsOpen(false)} className="block text-white font-medium">Contatos</a>
+          <AdminButton />
           <a href="#contatos" onClick={() => setIsOpen(false)} className="block mt-4 text-center bg-white text-blue-900 rounded-full px-5 py-3 font-bold">
             Entre em contato
           </a>
         </div>
       )}
     </nav>
+  );
+};
+
+const AdminButton = () => {
+  const { isAdmin } = useAuth();
+  if (!isAdmin) return null;
+  return (
+    <Link to="/admin" className="flex items-center gap-2 text-orange-400 hover:text-orange-300 font-bold transition-colors">
+      <ShieldCheck className="w-5 h-5" />
+      ADMIN
+    </Link>
   );
 };
 
@@ -140,11 +159,13 @@ const FeaturedGames = ({
 }) => {
   const handleOpenTurboRushLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
+    AnalyticsService.trackGameOpen('turbo_rush_3d');
     onOpenTurboRush();
   };
 
   const handleOpenDeskRacerLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
+    AnalyticsService.trackGameOpen('desk_racer');
     onOpenDeskRacer();
   };
 
@@ -183,6 +204,7 @@ const FeaturedGames = ({
               href="https://play.google.com/store/apps/details?id=com.aistudio.cobrapromax.game&pcampaignid=web_share"
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => AnalyticsService.trackGameClick('cobra_pro_max_playstore')}
               className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-3.5 font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer text-sm shadow-md"
             >
               <PlaySquare className="w-5 h-5" /> Google Play
@@ -305,7 +327,10 @@ const FeaturedGames = ({
             <button 
               id="featured-play-btn-4"
               type="button"
-              onClick={onOpenCobraProMax}
+              onClick={() => {
+                AnalyticsService.trackGameOpen('cobra_pro_max_web');
+                onOpenCobraProMax();
+              }}
               className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl py-3.5 font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:scale-[1.02] active:scale-[0.98]"
             >
               <Play className="w-5 h-5 fill-current" /> Jogar Cobra Pro Max
@@ -543,6 +568,7 @@ const ContactAndFooter = ({
              <h4 className="text-white font-bold mb-4">Empresa</h4>
              <ul className="space-y-2 text-sm text-slate-400">
                <li><a href="#contatos" className="hover:text-blue-400 transition-colors">Contatos</a></li>
+               <li><Link to="/admin/login" className="hover:text-orange-400 transition-colors opacity-50 hover:opacity-100">Painel do Proprietário</Link></li>
              </ul>
            </div>
            <div>
@@ -622,6 +648,22 @@ const ContactAndFooter = ({
 };
 
 export default function App() {
+  const location = useLocation();
+
+  useEffect(() => {
+    AnalyticsService.trackPageView(location.pathname);
+  }, [location.pathname]);
+
+  return (
+    <Routes>
+      <Route path="/" element={<Home />} />
+      <Route path="/admin" element={<AdminPage />} />
+      <Route path="/admin/login" element={<AdminLoginPage />} />
+    </Routes>
+  );
+}
+
+function Home() {
   const [isCobraProMaxOpen, setIsCobraProMaxOpen] = useState(false);
   const [isTurboRushOpen, setIsTurboRushOpen] = useState(false);
   const [isDeskRacerOpen, setIsDeskRacerOpen] = useState(false);
