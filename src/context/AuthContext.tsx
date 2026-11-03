@@ -30,20 +30,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const ADMIN_EMAIL = 'primevideoempresa@gmail.com';
 
   useEffect(() => {
-    // Handle redirect result
-    getRedirectResult(auth)
-      .then((result) => {
+    // Handle redirect result on mount
+    const handleRedirect = async () => {
+      try {
+        const result = await getRedirectResult(auth);
         if (result?.user) {
           if (result.user.email !== ADMIN_EMAIL) {
-            signOut(auth);
+            await signOut(auth);
             setError('Acesso negado: apenas a conta autorizada pode acessar o painel.');
           }
         }
-      })
-      .catch((err: AuthError) => {
-        console.error('Redirect result error:', err);
+      } catch (err: any) {
+        console.error('Erro no resultado do redirecionamento:', err);
         setError(`Erro na autenticação: ${err.message}`);
-      });
+      }
+    };
+
+    handleRedirect();
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user && user.email !== ADMIN_EMAIL) {
@@ -61,27 +64,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async () => {
     setError(null);
     try {
-      // First try popup, as it's a better UX if it works
-      await signInWithPopup(auth, googleProvider);
+      // For cross-browser compatibility and environment constraints, 
+      // we try redirect as the primary method or fallback if popup fails
+      await signInWithRedirect(auth, googleProvider);
     } catch (err: any) {
-      console.warn('Popup login failed, trying redirect:', err);
-      // If popup is blocked or fails, use redirect
-      if (err.code === 'auth/popup-blocked' || err.code === 'auth/cancelled-popup-request') {
-        try {
-          await signInWithRedirect(auth, googleProvider);
-        } catch (redirectErr: any) {
-          console.error('Redirect login failed:', redirectErr);
-          setError(`Erro ao iniciar login: ${redirectErr.message}`);
-        }
-      } else {
-        setError(`Erro no login: ${err.message}`);
-      }
+      console.error('Erro ao iniciar login por redirecionamento:', err);
+      setError(`Erro ao iniciar login: ${err.message}`);
     }
   };
 
   const logout = async () => {
-    await signOut(auth);
+    try {
+      await signOut(auth);
+      setUser(null);
+    } catch (err: any) {
+      console.error('Erro ao sair:', err);
+    }
   };
+
 
   const clearError = () => setError(null);
 

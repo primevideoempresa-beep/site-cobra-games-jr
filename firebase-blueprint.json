@@ -58,6 +58,16 @@
         "gameClicks": { "type": "object" }
       },
       "required": ["date"]
+    },
+    "GameStats": {
+      "title": "Game Stats",
+      "description": "Aggregated statistics for specific games.",
+      "type": "object",
+      "properties": {
+        "clicks": { "type": "integer" },
+        "opens": { "type": "integer" },
+        "lastUpdated": { "type": "string", "format": "date-time" }
+      }
     }
   },
   "firestore": {
@@ -76,6 +86,11 @@
     "/daily_stats/{date}": {
       "schema": "DailyStats",
       "description": "Aggregated stats per day."
+    },
+    "/game_stats/{gameId}": {
+      "schema": "GameStats",
+      "description": "Aggregated stats for each game."
     }
   }
 }
+
