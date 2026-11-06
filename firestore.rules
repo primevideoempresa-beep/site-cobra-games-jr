@@ -22,37 +22,44 @@ service cloud.firestore {
 
     // Visitors collection
     match /visitors/{visitorId} {
-      allow create: if true; // Anyone can start tracking
-      allow update: if true; // Anyone can update their own lastVisit (simple for now)
-      allow get: if isAdmin();
+      allow read, write: if true; // Allowed for public tracking
       allow list: if isAdmin();
     }
 
     // Sessions collection
     match /sessions/{sessionId} {
-      allow create: if true;
-      allow update: if true;
-      allow get: if isAdmin();
+      allow read, write: if true; // Allowed for public tracking
       allow list: if isAdmin();
     }
 
     // Events collection
     match /events/{eventId} {
       allow create: if true;
-      allow get: if isAdmin();
+      allow read: if isAdmin();
       allow list: if isAdmin();
     }
 
     // Daily stats (optional pre-aggregation)
     match /daily_stats/{date} {
-      allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     // Game stats
     match /game_stats/{gameId} {
+      allow read: if isAdmin() || true; // Allow public read for UI stats if needed
+      allow write: if true; 
+    }
+
+    // System logs (Auth and Critical errors)
+    match /system_logs/{logId} {
+      allow create: if true; // Allow anyone to report a failure (so we catch auth failures)
       allow read: if isAdmin();
-      allow write: if true; // Allowed so anyone can increment clicks/opens
+      allow list: if isAdmin();
+    }
+
+    // FCM Tokens
+    match /fcm_tokens/{tokenId} {
+      allow read, write: if isAdmin();
     }
   }
 }

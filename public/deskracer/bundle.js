@@ -55855,6 +55855,9 @@ async function initApp() {
     camButtons.forEach((btn) => {
       btn.classList.toggle("active", Number(btn.dataset.cam) === mode);
     });
+    if (typeof sendDeskRacerAnalytics === "function") {
+      sendDeskRacerAnalytics("camera_switch", { camera: mode });
+    }
     if (visorOverlay) {
       visorOverlay.classList.add("hidden");
     }
@@ -56129,6 +56132,9 @@ async function initApp() {
     }
     if (iconSoundOn) iconSoundOn.classList.toggle("hidden", !enabled);
     if (iconSoundOff) iconSoundOff.classList.toggle("hidden", enabled);
+    if (typeof sendDeskRacerAnalytics === "function") {
+      sendDeskRacerAnalytics("sound_toggle", { soundEnabled: enabled });
+    }
   }
   if (btnAudio) {
     btnAudio.addEventListener("click", () => {
@@ -56708,13 +56714,39 @@ async function initApp() {
     }
     finishOverlayShown = true;
   }
+  function sendDeskRacerAnalytics(eventName, payload) {
+    try {
+      const msg = {
+        source: 'desk_racer',
+        event: eventName,
+        payload: payload || {},
+        timestamp: Date.now()
+      };
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(msg, '*');
+      }
+      window.dispatchEvent(new CustomEvent('desk_racer_analytics', { detail: msg }));
+    } catch (_err) {
+      // Ignore cross-origin
+    }
+  }
   physics.onLapComplete((lapTime, bestLap, completedLapNum, totalTime, isFinish) => {
     if (!physics.state.autopilot) {
       recordLapTime(lapTime);
+      sendDeskRacerAnalytics('lap_completed', {
+        lapNumber: completedLapNum || 1,
+        lapTime: lapTime,
+        bestLap: bestLap,
+        isFinish: Boolean(isFinish)
+      });
     }
     if (isFinish) {
       const finalTotal = totalTime ?? physics.state.finishTotalTime ?? physics.state.totalRaceTime ?? lapTime;
       showFinishOverlay(finalTotal, bestLap ?? lapTime, true);
+      sendDeskRacerAnalytics('race_finish', {
+        totalTime: finalTotal,
+        bestLap: bestLap ?? lapTime
+      });
     } else {
       audioSynth.playLapChime();
       const lapNum = completedLapNum || Math.max(1, (physics.state.lapCount || 2) - 1);
@@ -56724,6 +56756,10 @@ async function initApp() {
   if (physics.onRaceFinish) {
     physics.onRaceFinish((totalTime, _lapTimes, bestLap) => {
       showFinishOverlay(totalTime, bestLap, true);
+      sendDeskRacerAnalytics('race_finish', {
+        totalTime: totalTime,
+        bestLap: bestLap
+      });
     });
   }
   physics.onModeChange((isAuto) => {
@@ -56836,6 +56872,9 @@ async function initApp() {
   const welcomePauseText = document.getElementById("welcome-pause-text");
   function togglePauseGame(forcedState) {
     isGamePaused = typeof forcedState === "boolean" ? forcedState : !isGamePaused;
+    if (typeof sendDeskRacerAnalytics === "function") {
+      sendDeskRacerAnalytics("pause_toggle", { isPaused: isGamePaused });
+    }
     if (isGamePaused) {
       if (hudPauseLabel) hudPauseLabel.textContent = "RETOMAR";
       if (iconPauseSvg) iconPauseSvg.classList.add("hidden");
@@ -57071,6 +57110,9 @@ async function initApp() {
     hideFinishOverlay();
     hideLapSplit();
     startF1StartCountdown();
+    sendDeskRacerAnalytics('race_start', {
+      inputMethod: ('ontouchstart' in window || navigator.maxTouchPoints > 0) ? 'touch' : 'keyboard'
+    });
   }
   if (btnHudStart) {
     btnHudStart.addEventListener("click", (e2) => {
@@ -57119,6 +57161,7 @@ async function initApp() {
   if (btnFinishRaceAgain) {
     btnFinishRaceAgain.addEventListener("click", (e2) => {
       e2.stopPropagation();
+      sendDeskRacerAnalytics('replay_click');
       dismissWelcomeAndStartRace();
       btnFinishRaceAgain.blur();
     });

@@ -2041,15 +2041,42 @@ async function initApp() {
     finishOverlayShown = true;
   }
 
+  function sendDeskRacerAnalytics(eventName, payload) {
+    try {
+      const msg = {
+        source: 'desk_racer',
+        event: eventName,
+        payload: payload || {},
+        timestamp: Date.now()
+      };
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(msg, '*');
+      }
+      window.dispatchEvent(new CustomEvent('desk_racer_analytics', { detail: msg }));
+    } catch (_err) {
+      // Ignore
+    }
+  }
+
   physics.onLapComplete((lapTime, bestLap, completedLapNum, totalTime, isFinish) => {
     if (!physics.state.autopilot) {
       recordLapTime(lapTime);
+      sendDeskRacerAnalytics('lap_completed', {
+        lapNumber: completedLapNum || 1,
+        lapTime,
+        bestLap,
+        isFinish: Boolean(isFinish)
+      });
     }
 
     if (isFinish) {
       const finalTotal =
         totalTime ?? physics.state.finishTotalTime ?? physics.state.totalRaceTime ?? lapTime;
       showFinishOverlay(finalTotal, bestLap ?? lapTime, true);
+      sendDeskRacerAnalytics('race_finish', {
+        totalTime: finalTotal,
+        bestLap: bestLap ?? lapTime
+      });
     } else {
       audioSynth.playLapChime();
       const lapNum = completedLapNum || Math.max(1, (physics.state.lapCount || 2) - 1);
@@ -2060,6 +2087,10 @@ async function initApp() {
   if (physics.onRaceFinish) {
     physics.onRaceFinish((totalTime, _lapTimes, bestLap) => {
       showFinishOverlay(totalTime, bestLap, true);
+      sendDeskRacerAnalytics('race_finish', {
+        totalTime,
+        bestLap
+      });
     });
   }
 
@@ -2469,6 +2500,9 @@ async function initApp() {
     hideFinishOverlay();
     hideLapSplit();
     startF1StartCountdown();
+    sendDeskRacerAnalytics('race_start', {
+      inputMethod: ('ontouchstart' in window || navigator.maxTouchPoints > 0) ? 'touch' : 'keyboard'
+    });
   }
 
   if (btnHudStart) {
@@ -2522,6 +2556,7 @@ async function initApp() {
   if (btnFinishRaceAgain) {
     btnFinishRaceAgain.addEventListener('click', (e) => {
       e.stopPropagation();
+      sendDeskRacerAnalytics('replay_click');
       dismissWelcomeAndStartRace();
       btnFinishRaceAgain.blur();
     });

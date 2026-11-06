@@ -79,33 +79,33 @@ export const CookieConsentBanner: React.FC<CookieConsentBannerProps> = ({
       {showBanner && !isPreferencesOpen && (
         <div 
           id="cookie-consent-banner"
-          className="fixed bottom-0 left-0 right-0 z-40 p-4 sm:p-6 bg-slate-950/95 border-t border-slate-800 text-white shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom duration-300"
+          className="fixed bottom-0 left-0 right-0 z-40 p-4 sm:p-6 pb-[max(16px,env(safe-area-inset-bottom,16px))] bg-slate-950/98 border-t border-slate-800 text-white shadow-2xl backdrop-blur-md animate-in slide-in-from-bottom duration-300"
         >
-          <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5">
-            <div className="flex items-start gap-4">
-              <div className="w-11 h-11 rounded-2xl bg-blue-600/30 border border-blue-500/30 flex items-center justify-center flex-shrink-0 text-amber-400 mt-1">
-                <Cookie className="w-6 h-6" />
+          <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 sm:gap-5">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-blue-600/30 border border-blue-500/30 flex items-center justify-center flex-shrink-0 text-amber-400 mt-0.5">
+                <Cookie className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
               <div>
-                <h4 className="text-base font-bold text-white flex items-center gap-2">
+                <h4 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
                   Valorizamos sua privacidade e controle de dados
                 </h4>
                 <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-3xl leading-relaxed">
                   A <strong>COBRA GAMES JR</strong> utiliza cookies e tecnologias semelhantes para garantir o funcionamento dos jogos, salvar recordes, mensurar audiência (Google Analytics) e exibir anúncios relevantes (Google AdSense). Conforme a LGPD, você pode escolher quais cookies deseja permitir.
                 </p>
-                <div className="mt-2 flex items-center gap-3 text-xs">
+                <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
                   <button
                     type="button"
                     onClick={onOpenPolicy}
-                    className="text-blue-400 hover:text-blue-300 underline font-medium cursor-pointer"
+                    className="text-blue-400 hover:text-blue-300 underline font-medium cursor-pointer py-1"
                   >
                     Ler a Política de Cookies completa
                   </button>
-                  <span className="text-slate-600">•</span>
+                  <span className="text-slate-600 hidden xs:inline">•</span>
                   <button
                     type="button"
                     onClick={() => setIsPreferencesOpen(true)}
-                    className="text-slate-300 hover:text-white flex items-center gap-1 font-medium cursor-pointer"
+                    className="text-slate-300 hover:text-white flex items-center gap-1 font-medium cursor-pointer py-1"
                   >
                     <Settings className="w-3.5 h-3.5" /> Personalizar opções
                   </button>
@@ -113,25 +113,25 @@ export const CookieConsentBanner: React.FC<CookieConsentBannerProps> = ({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto flex-shrink-0">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full lg:w-auto flex-shrink-0 pt-1 lg:pt-0">
               <button
                 type="button"
                 onClick={handleRejectNonEssential}
-                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer"
+                className="flex-1 sm:flex-initial px-3 sm:px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer min-h-[42px]"
               >
                 Apenas Essenciais
               </button>
               <button
                 type="button"
                 onClick={() => setIsPreferencesOpen(true)}
-                className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl border border-blue-600/50 bg-blue-950/40 hover:bg-blue-900/50 text-blue-200 text-xs sm:text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                className="flex-1 sm:flex-initial px-3 sm:px-4 py-2.5 rounded-xl border border-blue-600/50 bg-blue-950/40 hover:bg-blue-900/50 text-blue-200 text-xs sm:text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 min-h-[42px]"
               >
                 <Settings className="w-4 h-4" /> Preferências
               </button>
               <button
                 type="button"
                 onClick={handleAcceptAll}
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-bold transition-colors cursor-pointer shadow-lg shadow-blue-600/30 flex items-center justify-center gap-1.5"
+                className="w-full sm:w-auto px-4 sm:px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-bold transition-colors cursor-pointer shadow-lg shadow-blue-600/30 flex items-center justify-center gap-1.5 min-h-[42px]"
               >
                 <Check className="w-4 h-4" /> Aceitar Todos
               </button>
@@ -144,12 +144,12 @@ export const CookieConsentBanner: React.FC<CookieConsentBannerProps> = ({
       {isPreferencesOpen && (
         <div
           id="cookie-preferences-overlay"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-3 sm:p-6 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-2 sm:p-6 animate-in fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsPreferencesOpen(false);
           }}
         >
-          <div className="bg-white text-slate-800 w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+          <div className="bg-white text-slate-800 w-full max-w-2xl rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92dvh]">
             <div className="bg-slate-900 text-white p-6 flex items-center justify-between border-b border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white">

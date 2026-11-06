@@ -29,29 +29,29 @@ export const TermsOfUseModal: React.FC<TermsOfUseModalProps> = ({
   return (
     <div
       id="terms-of-use-modal-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-2 sm:p-6 overflow-y-auto animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         id="terms-of-use-modal-dialog"
-        className="bg-white text-slate-800 w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden my-auto"
+        className="bg-white text-slate-800 w-full max-w-4xl max-h-[94dvh] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden my-auto"
       >
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-950 text-white p-6 sm:p-8 flex items-start justify-between relative flex-shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 shadow-inner">
-              <Scale className="w-7 h-7 text-blue-300" />
+        <div className="bg-gradient-to-r from-slate-900 via-blue-900 to-indigo-950 text-white p-4 sm:p-8 flex items-start justify-between relative flex-shrink-0">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300 shadow-inner shrink-0">
+              <Scale className="w-6 h-6 sm:w-7 sm:h-7 text-blue-300" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-700/60 text-blue-200 border border-blue-500/30">
-                  COBRA GAMES JR LLC
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-700/60 text-blue-200 border border-blue-500/30">
+                  COBRA GAMES JR
                 </span>
-                <span className="text-xs text-blue-300">Vigência: 2026</span>
+                <span className="text-[10px] sm:text-xs text-blue-300">Vigência: 2026</span>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white mt-1">
+              <h2 className="text-xl sm:text-3xl font-black tracking-tight text-white mt-1 truncate">
                 Termos de Uso
               </h2>
             </div>

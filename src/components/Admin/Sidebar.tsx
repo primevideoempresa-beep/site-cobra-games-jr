@@ -9,7 +9,8 @@ import {
   Settings, 
   ShieldCheck, 
   LogOut,
-  ChevronRight
+  ChevronRight,
+  X
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -22,6 +23,8 @@ interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   onLogout: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
 const menuItems = [
@@ -35,21 +38,44 @@ const menuItems = [
   { id: 'security', label: 'Segurança', icon: ShieldCheck },
 ];
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLogout }) => {
+export const Sidebar = React.memo<SidebarProps>(({ activeTab, setActiveTab, onLogout, isOpen, onClose }) => {
   return (
-    <div className="w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col h-screen fixed left-0 top-0">
-      <div className="p-6 border-b border-zinc-800">
-        <h1 className="text-white font-black text-xl tracking-tight flex flex-col">
-          <span className="text-orange-500 text-xs uppercase tracking-widest mb-1">Cobra Games Jr</span>
-          <span>ADMIN MASTER</span>
-        </h1>
-      </div>
+    <>
+      {/* Mobile Overlay */}
+      <div 
+        className={cn(
+          "fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden transition-opacity duration-300",
+          isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        )}
+        onClick={onClose}
+      />
+
+      <div className={cn(
+        "w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col h-screen fixed left-0 top-0 z-[70] transition-transform duration-300 lg:translate-x-0",
+        isOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className="p-6 border-b border-zinc-800 flex items-center justify-between">
+          <h1 className="text-white font-black text-xl tracking-tight flex flex-col">
+            <span className="text-orange-500 text-xs uppercase tracking-widest mb-1">Cobra Games Jr</span>
+            <span>ADMIN MASTER</span>
+          </h1>
+          <button 
+            onClick={onClose}
+            className="lg:hidden p-2 text-zinc-500 hover:text-white"
+            aria-label="Fechar menu"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
 
       <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
         {menuItems.map((item) => (
           <button
             key={item.id}
-            onClick={() => setActiveTab(item.id)}
+            onClick={() => {
+              setActiveTab(item.id);
+              if (onClose) onClose();
+            }}
             className={cn(
               "w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 group",
               activeTab === item.id 
@@ -76,5 +102,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, onLog
         </button>
       </div>
     </div>
+    </>
   );
-};
+});

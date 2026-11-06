@@ -29,29 +29,29 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({
   return (
     <div
       id="privacy-policy-modal-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-2 sm:p-6 overflow-y-auto animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         id="privacy-policy-modal-dialog"
-        className="bg-white text-slate-800 w-full max-w-4xl max-h-[90vh] rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden my-auto"
+        className="bg-white text-slate-800 w-full max-w-4xl max-h-[94dvh] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden my-auto"
       >
         {/* Modal Header */}
-        <div className="bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-950 text-white p-6 sm:p-8 flex items-start justify-between relative flex-shrink-0">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-blue-600/30 border border-blue-400/40 flex items-center justify-center text-blue-300 shadow-inner">
-              <Shield className="w-7 h-7 text-blue-400" />
+        <div className="bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-950 text-white p-4 sm:p-8 flex items-start justify-between relative flex-shrink-0">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-blue-600/30 border border-blue-400/40 flex items-center justify-center text-blue-300 shadow-inner shrink-0">
+              <Shield className="w-6 h-6 sm:w-7 sm:h-7 text-blue-400" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-blue-700/60 text-blue-200 border border-blue-500/30">
-                  COBRA GAMES JR LLC
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-700/60 text-blue-200 border border-blue-500/30">
+                  COBRA GAMES JR
                 </span>
-                <span className="text-xs text-blue-300">Conformidade LGPD &amp; GDPR</span>
+                <span className="text-[10px] sm:text-xs text-blue-300">LGPD &amp; GDPR</span>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white mt-1">
+              <h2 className="text-xl sm:text-3xl font-black tracking-tight text-white mt-1 truncate">
                 Política de Privacidade
               </h2>
             </div>

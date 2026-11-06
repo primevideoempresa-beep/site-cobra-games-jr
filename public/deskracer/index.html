@@ -2,7 +2,7 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
     <title>Desk Racer - Corrida de Mesa</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -168,15 +168,15 @@
     </div>
 
     <!-- Mobile Controls -->
-    <div class="mobile-touch-controls hidden">
+    <div id="mobile-touch-controls" class="mobile-touch-controls hidden">
       <div class="mobile-ctrl-cluster cluster-left">
-        <button id="touch-left" class="mobile-ctrl-btn mobile-ctrl-steer" type="button">
+        <button id="touch-left" data-control="left" class="mobile-ctrl-btn mobile-ctrl-steer" type="button" aria-label="Virar para esquerda">
           <div class="mobile-ctrl-inner">
             <svg class="mobile-ctrl-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
             <span class="mobile-ctrl-label">A</span>
           </div>
         </button>
-        <button id="touch-right" class="mobile-ctrl-btn mobile-ctrl-steer" type="button">
+        <button id="touch-right" data-control="right" class="mobile-ctrl-btn mobile-ctrl-steer" type="button" aria-label="Virar para direita">
           <div class="mobile-ctrl-inner">
             <svg class="mobile-ctrl-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
             <span class="mobile-ctrl-label">D</span>
@@ -184,13 +184,13 @@
         </button>
       </div>
       <div class="mobile-ctrl-cluster cluster-right">
-        <button id="touch-brake" class="mobile-ctrl-btn mobile-ctrl-brake" type="button">
+        <button id="touch-brake" data-control="backward" class="mobile-ctrl-btn mobile-ctrl-brake" type="button" aria-label="Freio e marcha ré">
           <div class="mobile-ctrl-inner">
             <svg class="mobile-ctrl-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 10h12M6 14h12"/></svg>
             <span class="mobile-ctrl-label">S</span>
           </div>
         </button>
-        <button id="touch-accel" class="mobile-ctrl-btn mobile-ctrl-accel" type="button">
+        <button id="touch-accel" data-control="forward" class="mobile-ctrl-btn mobile-ctrl-accel" type="button" aria-label="Acelerar">
           <div class="mobile-ctrl-inner">
             <svg class="mobile-ctrl-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
             <span class="mobile-ctrl-label">W</span>

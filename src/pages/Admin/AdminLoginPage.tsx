@@ -1,31 +1,43 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ShieldAlert, ArrowLeft, AlertCircle, X } from 'lucide-react';
+import { ShieldAlert, ArrowLeft, AlertCircle, X, Loader2 } from 'lucide-react';
 
 export const AdminLoginPage = () => {
-  const { login, isAdmin, user, loading, error, clearError } = useAuth();
+  const { login, isAdmin, loading, error, clearError } = useAuth();
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const navigate = useNavigate();
 
   React.useEffect(() => {
     if (isAdmin) {
+      console.log('[Navigation] [AdminLogin] Usuário administrador detectado. Redirecionando para o painel...');
       navigate('/admin');
     }
   }, [isAdmin, navigate]);
 
   const handleLogin = async () => {
     try {
+      setIsRedirecting(true);
       await login();
     } catch (err) {
       console.error('Login handle error:', err);
+      setIsRedirecting(false);
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-black flex items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-zinc-500 font-bold animate-pulse">Verificando credenciais...</p>
+  // Full page loading state for initial auth check or post-redirect validation
+  if (loading && !isRedirecting) return (
+    <div className="min-h-screen bg-black flex items-center justify-center p-6">
+      <div className="flex flex-col items-center gap-6">
+        <div className="relative">
+          <div className="w-20 h-20 border-4 border-orange-500/20 rounded-full" />
+          <div className="absolute top-0 left-0 w-20 h-20 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+          <ShieldAlert className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 text-orange-500 animate-pulse" />
+        </div>
+        <div className="text-center">
+          <p className="text-white text-xl font-black mb-2 tracking-tight">PROTEÇÃO COBRA JR</p>
+          <p className="text-zinc-500 font-bold animate-pulse">Sincronizando com Firebase...</p>
+        </div>
       </div>
     </div>
   );
@@ -61,10 +73,20 @@ export const AdminLoginPage = () => {
 
           <button
             onClick={handleLogin}
-            className="w-full bg-white hover:bg-zinc-100 text-black font-black py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-3 mb-6 active:scale-[0.98]"
+            disabled={isRedirecting || loading}
+            className="w-full bg-white hover:bg-zinc-100 disabled:bg-zinc-200 text-black font-black py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-3 mb-6 active:scale-[0.98] disabled:scale-100 disabled:opacity-80"
           >
-            <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-            Entrar com Google
+            {isRedirecting ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Conectando...
+              </>
+            ) : (
+              <>
+                <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
+                Entrar com Google
+              </>
+            )}
           </button>
 
           <div className="space-y-4">
