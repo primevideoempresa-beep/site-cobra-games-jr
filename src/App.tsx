@@ -3,27 +3,49 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { Menu, X, Download, MapPin, Mail, Gamepad2, Apple, PlaySquare, Play, Trophy, ExternalLink, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Menu, X, Download, MapPin, Mail, Gamepad2, Apple, PlaySquare, Play, ShieldCheck, Wrench, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Routes, Route, useNavigate, useLocation, Link } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation, Link, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AnalyticsService } from './services/analytics';
 import { AdminPage } from './pages/Admin/AdminPage';
 import { AdminLoginPage } from './pages/Admin/AdminLoginPage';
-import { otherGames } from './data';
-import wormIcon from './assets/images/regenerated_image_1788833588389.jpg';
-import kledImage from './assets/images/kled_3d_render_1793497542465.jpg';
-import deskRacerImage from './assets/images/desk_racer_3d_1793497611855.jpg';
-import { TurboRushModal } from './components/TurboRushModal';
-import { CobraProMaxModal } from './components/CobraProMaxModal';
+import { GamePlayerPage } from './pages/GamePlayerPage';
+import { BannerCarousel } from './components/BannerCarousel';
+import { ToastNotification } from './components/ToastNotification';
 import { CookiePolicyModal } from './components/CookiePolicyModal';
 import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { PrivacyPolicyModal } from './components/PrivacyPolicyModal';
 import { TermsOfUseModal } from './components/TermsOfUseModal';
-import { DeskRacerModal } from './components/DeskRacerModal';
-import { KledModal } from './components/KledModal';
-import { BannerCarousel } from './components/BannerCarousel';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from './lib/firebase';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { otherGames } from './data';
+
+// Global error listener to capture non-React fatal errors with sensitive data sanitization
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    const safeMsg = typeof event.message === 'string' 
+      ? event.message.replace(/AIza[0-9A-Za-z-_]{35}/g, 'AIza••••').replace(/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g, '[PROTEGIDO]')
+      : 'Erro de execução';
+    (window as any).lastGlobalError = {
+      message: safeMsg
+    };
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const rawReason = event.reason?.message || String(event.reason);
+    const safeReason = typeof rawReason === 'string' 
+      ? rawReason.replace(/AIza[0-9A-Za-z-_]{35}/g, 'AIza••••').replace(/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/g, '[PROTEGIDO]')
+      : 'Rejeição assíncrona';
+    (window as any).lastPromiseError = {
+      reason: safeReason
+    };
+  });
+}
+
+const wormIcon = "/assets/aistudio/icone_d2367d66.webp";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -85,9 +107,9 @@ const Navbar = () => {
         {/* Desktop */}
         <div className="hidden md:flex items-center gap-6 lg:gap-8">
           <a href="#destaques" className="text-cyan-300 hover:text-white font-medium transition-colors text-sm lg:text-base">Destaques</a>
+          <a href="#principais" className="text-blue-100 hover:text-white font-medium transition-colors text-sm lg:text-base">Principais</a>
           <a href="#jogos" className="text-blue-100 hover:text-white font-medium transition-colors text-sm lg:text-base">Jogos</a>
-          <a href="#categorias" className="text-blue-100 hover:text-white font-medium transition-colors text-sm lg:text-base">Categorias</a>
-          <a href="#contatos" className="text-blue-100 hover:text-white font-medium transition-colors text-sm lg:text-base">Contato</a>
+
           <AdminButton />
           <a href="#contatos" className="bg-white hover:bg-blue-50 text-blue-900 rounded-full px-5 py-2.5 font-bold transition-colors text-sm lg:text-base">
             Entre em contato
@@ -109,7 +131,6 @@ const Navbar = () => {
         <div className="md:hidden border-t border-blue-800 bg-blue-900/98 backdrop-blur-lg px-5 py-5 space-y-3 shadow-2xl animate-in slide-in-from-top-2 duration-200">
           <a href="#destaques" onClick={() => setIsOpen(false)} className="flex items-center h-11 px-3 rounded-xl text-cyan-300 hover:bg-blue-800 font-semibold text-base transition-colors">Destaques</a>
           <a href="#jogos" onClick={() => setIsOpen(false)} className="flex items-center h-11 px-3 rounded-xl text-white hover:bg-blue-800 font-semibold text-base transition-colors">Jogos</a>
-          <a href="#categorias" onClick={() => setIsOpen(false)} className="flex items-center h-11 px-3 rounded-xl text-white hover:bg-blue-800 font-semibold text-base transition-colors">Categorias</a>
           <a href="#contatos" onClick={() => setIsOpen(false)} className="flex items-center h-11 px-3 rounded-xl text-white hover:bg-blue-800 font-semibold text-base transition-colors">Contatos</a>
           <div className="px-3 pt-1">
             <AdminButton />
@@ -136,244 +157,48 @@ const AdminButton = () => {
 
 const HeroAndStats = ({ onNavigateToCategory }: { onNavigateToCategory?: (category?: string) => void }) => (
   <div className="bg-blue-900 pt-16 sm:pt-20">
-    <section className="pt-14 sm:pt-20 md:pt-24 pb-10 sm:pb-14 px-4 sm:px-6 max-w-6xl mx-auto text-center">
-      <h1 className="text-3xl xs:text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-black tracking-tight text-white mb-4 sm:mb-6 leading-[1.12] break-words text-balance">
+    <section className="pt-10 sm:pt-14 md:pt-16 pb-8 sm:pb-10 px-4 sm:px-6 max-w-6xl mx-auto text-center">
+      <h1 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-white mb-3 sm:mb-4 leading-[1.12] break-words text-balance">
         Jogos para celular que o <span className="text-blue-400">mundo inteiro joga</span>
       </h1>
-      <p className="text-sm xs:text-base sm:text-lg md:text-xl text-blue-100 mb-6 sm:mb-10 max-w-3xl mx-auto leading-relaxed px-1">
+      <p className="text-xs xs:text-sm sm:text-base md:text-lg text-blue-100 mb-5 sm:mb-8 max-w-2xl mx-auto leading-relaxed px-1">
         A COBRA GAMES JR é uma editora de jogos casuais para dispositivos móveis, sediada no Brasil. De cobras famintas a corridas de supercarros 3D, nossos jogos conquistam milhões de jogadores em todo o mundo.
       </p>
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 mb-4 max-w-md sm:max-w-none mx-auto w-full sm:w-auto">
-        <a href="#jogos" className="bg-white hover:bg-blue-50 text-blue-900 rounded-full px-8 sm:px-10 py-3.5 sm:py-4 font-extrabold transition-all shadow-xl hover:shadow-2xl text-base sm:text-lg hover:scale-105 active:scale-95 text-center flex items-center justify-center min-h-[48px]">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 mb-2 max-w-md sm:max-w-none mx-auto w-full sm:w-auto">
+        <a href="#jogos" className="bg-white hover:bg-blue-50 text-blue-900 rounded-full px-6 sm:px-8 py-2.5 sm:py-3 font-extrabold transition-all shadow-xl hover:shadow-2xl text-sm sm:text-base hover:scale-105 active:scale-95 text-center flex items-center justify-center min-h-[44px]">
           Explore nossos jogos
         </a>
-        <a href="#destaques" className="bg-blue-800/80 hover:bg-blue-700/80 border border-blue-500/40 text-cyan-300 hover:text-white rounded-full px-6 sm:px-8 py-3.5 sm:py-4 font-bold transition-all text-base sm:text-lg hover:scale-105 active:scale-95 text-center flex items-center justify-center min-h-[48px]">
+        <a href="#destaques" className="bg-blue-800/80 hover:bg-blue-700/80 border border-blue-500/40 text-cyan-300 hover:text-white rounded-full px-5 sm:px-6 py-2.5 sm:py-3 font-bold transition-all text-sm sm:text-base hover:scale-105 active:scale-95 text-center flex items-center justify-center min-h-[44px]">
           Ver Destaques
         </a>
       </div>
     </section>
 
     {/* Gamer Neon Carousel Showcase */}
-    <div id="destaques" className="w-full pb-8 sm:pb-12">
+    <div id="destaques" className="w-full pb-6 sm:pb-8">
       <BannerCarousel onNavigateToCategory={onNavigateToCategory} />
     </div>
 
-    <section className="py-12 sm:py-16 border-t border-blue-800/50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-blue-800/50">
-        <div className="py-4">
-          <div className="text-3xl sm:text-4xl md:text-5xl font-black text-white mb-2 font-mono tabular-nums">10B +</div>
-          <div className="text-blue-200 font-medium text-sm sm:text-base md:text-lg">downloads combinados em todo o nosso portfólio</div>
+    <section className="py-8 sm:py-10 border-t border-blue-800/50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 text-center divide-y md:divide-y-0 md:divide-x divide-blue-800/50">
+        <div className="py-3">
+          <div className="text-2xl sm:text-3xl md:text-4xl font-black text-white mb-1 font-mono tabular-nums">10B +</div>
+          <div className="text-blue-200 font-medium text-xs sm:text-sm">downloads combinados em todo o nosso portfólio</div>
         </div>
-        <div className="py-4">
-          <div className="text-3xl sm:text-4xl md:text-5xl font-black text-white mb-2 font-mono tabular-nums">200 +</div>
-          <div className="text-blue-200 font-medium text-sm sm:text-base md:text-lg">títulos publicados na App Store e no Google Play</div>
+        <div className="py-3">
+          <div className="text-2xl sm:text-3xl md:text-4xl font-black text-white mb-1 font-mono tabular-nums">200 +</div>
+          <div className="text-blue-200 font-medium text-xs sm:text-sm">títulos publicados na App Store e no Google Play</div>
         </div>
-        <div className="py-4">
-          <div className="text-3xl sm:text-4xl md:text-5xl font-black text-white mb-2 font-mono tabular-nums">500M +</div>
-          <div className="text-blue-200 font-medium text-sm sm:text-base md:text-lg max-w-xs mx-auto">downloads dos nossos maiores sucessos globais</div>
+        <div className="py-3">
+          <div className="text-2xl sm:text-3xl md:text-4xl font-black text-white mb-1 font-mono tabular-nums">500M +</div>
+          <div className="text-blue-200 font-medium text-xs sm:text-sm max-w-xs mx-auto">downloads dos nossos maiores sucessos globais</div>
         </div>
       </div>
     </section>
   </div>
 );
 
-const FeaturedGames = ({ 
-  onOpenCobraProMax,
-  onOpenTurboRush, 
-  onOpenDeskRacer,
-  onOpenKled,
-}: { 
-  onOpenCobraProMax: () => void;
-  onOpenTurboRush: () => void; 
-  onOpenDeskRacer: () => void;
-  onOpenKled: () => void;
-}) => {
-  const handleOpenTurboRushLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-    AnalyticsService.trackGameOpen('turbo_rush_3d');
-    onOpenTurboRush();
-  };
 
-  const handleOpenDeskRacerLink = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-    AnalyticsService.trackGameOpen('desk_racer');
-    onOpenDeskRacer();
-  };
-
-  return (
-    <section id="jogos" className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 max-w-7xl mx-auto">
-      <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-16">
-        <h2 className="text-blue-600 font-bold tracking-wide uppercase text-xs sm:text-sm mb-2 sm:mb-3">Nossos jogos</h2>
-        <h3 className="text-2xl xs:text-3xl md:text-4xl font-bold text-slate-900 mb-3 sm:mb-4">Jogadores de sucesso continuam voltando para</h3>
-        <p className="text-sm sm:text-base md:text-lg text-slate-500 max-w-2xl mx-auto leading-relaxed">
-          Meio bilhão de downloads cada — esses são os jogos principais que colocaram a COBRA GAMES JR nas paradas globais.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 max-w-5xl mx-auto">
-        {/* Card 1 */}
-        <div id="featured-game-card-1" className="relative bg-white border border-amber-100 rounded-2xl sm:rounded-3xl p-5 sm:p-7 md:p-8 shadow-xl shadow-slate-200/40 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-1 flex flex-col justify-between">
-          <div>
-            <div className="flex items-start justify-between gap-3 mb-5 sm:mb-6">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center overflow-hidden shadow-inner animate-pulse shrink-0">
-                <img src={wormIcon} alt="Minhoca Arco-Íris Brilhante" className="w-full h-full object-cover" />
-              </div>
-              <div id="bestseller-badge-1" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-full text-[11px] sm:text-xs font-black tracking-wide shadow-md shadow-amber-500/20 uppercase shrink-0">
-                <Trophy className="w-3.5 h-3.5 text-amber-100 fill-current" />
-                <span>★ #1 Bestseller</span>
-              </div>
-            </div>
-            <div className="text-xs sm:text-sm font-bold text-emerald-600 mb-2 flex items-center gap-1">
-              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Mais de 500 milhões de downloads
-            </div>
-            <h4 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2 sm:mb-3">Cobra Pro Max — Cobra Faminta</h4>
-            <p className="text-slate-500 text-sm sm:text-base mb-6 sm:mb-8 leading-relaxed">
-              Crie a minhoca mais comprida e faminta em uma arena multijogador vibrante. Um clássico do snake io reinventado — disponível para download no Google Play.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2.5">
-            <a 
-              id="featured-download-btn-1"
-              href="https://play.google.com/store/apps/details?id=com.aistudio.cobrapromax.game&pcampaignid=web_share"
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => AnalyticsService.trackGameClick('cobra_pro_max_playstore')}
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl py-3.5 px-4 font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer text-sm shadow-md active:scale-[0.98] min-h-[48px]"
-            >
-              <PlaySquare className="w-5 h-5 shrink-0" /> Google Play
-            </a>
-          </div>
-        </div>
-
-        {/* Card 2 */}
-        <div id="featured-game-card-2" className="bg-white border border-slate-100 rounded-2xl sm:rounded-3xl p-5 sm:p-7 md:p-8 shadow-xl shadow-slate-200/40 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-200/50 flex flex-col justify-between">
-          <div>
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-5 sm:mb-6 overflow-hidden shadow-inner shrink-0">
-              <img src="/assets/aistudio/Turbo_Rush__Corrida_Urbana_ao_Entardecer_8d1f0ea0.png" alt="Turbo Rush" className="w-full h-full object-cover" />
-            </div>
-            <div className="text-xs sm:text-sm font-bold text-red-500 mb-2 flex items-center gap-1">
-              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Mais de 500 milhões de downloads • Modo 3D
-            </div>
-            <h4 id="featured-game-title-2" className="text-xl sm:text-2xl font-bold text-slate-900 mb-2 sm:mb-3">Turbo Rush 3D — Supercarros</h4>
-            <p className="text-slate-500 text-sm sm:text-base mb-6 sm:mb-8 leading-relaxed">
-              Pilote supercarros 3D de alto padrão como Ferrari, Lamborghini, Porsche, Bugatti e McLaren! Escolha pinturas metálicas exclusivas, desvie do tráfego em alta velocidade e ative o nitro turbo!
-            </p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <a 
-              id="featured-download-btn-2"
-              href="/turbo-rush.html"
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleOpenTurboRushLink}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-3.5 px-4 font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-blue-600/20 active:scale-[0.98] min-h-[48px]"
-            >
-              <Play className="w-5 h-5 fill-current shrink-0" /> Jogar Turbo Rush
-            </a>
-          </div>
-        </div>
-
-        {/* Card 3 (Desk Racer) */}
-        <div id="featured-game-card-3" className="relative bg-white border border-slate-100 rounded-2xl sm:rounded-3xl p-5 sm:p-7 md:p-8 shadow-xl shadow-slate-200/40 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-200/50 flex flex-col justify-between">
-          <div className="absolute top-4 right-4 inline-flex items-center px-3 py-1 bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-full text-[11px] sm:text-xs font-black tracking-wide shadow-lg shadow-blue-500/30 animate-pulse">
-            Lançamento
-          </div>
-          <div>
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-5 sm:mb-6 overflow-hidden shadow-inner shrink-0">
-              <img src={deskRacerImage} alt="Desk Racer" className="w-full h-full object-cover" />
-            </div>
-            <div className="text-xs sm:text-sm font-bold text-blue-500 mb-2 flex items-center gap-1">
-              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Novo • Corrida de Mesa 3D
-            </div>
-            <h4 id="featured-game-title-3" className="text-xl sm:text-2xl font-bold text-slate-900 mb-2 sm:mb-3">Desk Racer</h4>
-            <p className="text-slate-500 text-sm sm:text-base mb-6 sm:mb-8 leading-relaxed">
-              Corrida de kart em miniatura em circuitos de mesa com física realista e visuais vibrantes!
-            </p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <a 
-              id="featured-download-btn-3"
-              href="/deskracer/index.html"
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleOpenDeskRacerLink}
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-3.5 px-4 font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-blue-600/20 active:scale-[0.98] min-h-[48px]"
-            >
-              <Play className="w-5 h-5 fill-current shrink-0" /> Jogar Desk Racer
-            </a>
-          </div>
-        </div>
-
-        {/* Card 4 (Cobra Pro Max — Versão Web) */}
-        <div id="featured-game-card-4" className="relative bg-white border border-emerald-100 rounded-2xl sm:rounded-3xl p-5 sm:p-7 md:p-8 shadow-xl shadow-slate-200/40 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-200/50 flex flex-col justify-between">
-          <div className="absolute top-4 right-4 inline-flex items-center px-3 py-1 bg-gradient-to-r from-emerald-600 to-teal-500 text-white rounded-full text-[11px] sm:text-xs font-black tracking-wide shadow-lg shadow-emerald-500/30 animate-pulse">
-            ★ Edição Web
-          </div>
-          <div>
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-5 sm:mb-6 overflow-hidden shadow-inner shrink-0">
-              <img src={wormIcon} alt="Cobra Pro Max Web" className="w-full h-full object-cover" />
-            </div>
-            <div className="text-xs sm:text-sm font-bold text-emerald-600 mb-2 flex items-center gap-1">
-              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Jogar no Navegador • Arena Snake IO
-            </div>
-            <h4 id="featured-game-title-4" className="text-xl sm:text-2xl font-bold text-slate-900 mb-2 sm:mb-3">Cobra Pro Max — Versão Web</h4>
-            <p className="text-slate-500 text-sm sm:text-base mb-6 sm:mb-8 leading-relaxed">
-              Jogue a arena multiplayer do Cobra Pro Max diretamente no seu navegador! Desvie de oponentes, coma orbes luminosos, utilize o acelerador e conquiste o primeiro lugar no placar mundial!
-            </p>
-          </div>
-          <div className="flex flex-col gap-3">
-            <button 
-              id="featured-play-btn-4"
-              type="button"
-              onClick={() => {
-                AnalyticsService.trackGameOpen('cobra_pro_max_web');
-                onOpenCobraProMax();
-              }}
-              className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl py-3.5 px-4 font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:scale-[1.02] active:scale-[0.98] min-h-[48px]"
-            >
-              <Play className="w-5 h-5 fill-current shrink-0" /> Jogar Cobra Pro Max
-            </button>
-          </div>
-        </div>
-
-        {/* Card 5 (Kled 3D — Cavaleiro da Batalha / AI Studio) */}
-        <div id="featured-game-card-5" className="relative bg-white border border-slate-100 rounded-2xl sm:rounded-3xl p-5 sm:p-7 md:p-8 shadow-xl shadow-slate-200/40 transition-all duration-300 ease-out hover:scale-[1.02] hover:-translate-y-1 hover:shadow-2xl hover:shadow-slate-200/50 flex flex-col justify-between overflow-hidden md:col-span-2 max-w-2xl mx-auto w-full">
-          <div className="absolute top-4 right-4 inline-flex items-center px-3 py-1 bg-gradient-to-r from-slate-600 to-slate-800 text-white rounded-full text-[11px] sm:text-xs font-black tracking-wide shadow-lg shadow-slate-500/30">
-            ★ Em Breve
-          </div>
-          <div className="opacity-75 grayscale-[0.5]">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mb-5 sm:mb-6 overflow-hidden shadow-inner shrink-0">
-              <img src={kledImage} alt="Kled 3D" className="w-full h-full object-cover" />
-            </div>
-            <div className="text-xs sm:text-sm font-bold text-slate-500 mb-2 flex items-center gap-1">
-              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Em Breve • Combate de Arena 3D
-            </div>
-            <h4 id="featured-game-title-5" className="text-xl sm:text-2xl font-bold text-slate-900 mb-2 sm:mb-3">Kled 3D — Cavaleiro da Batalha</h4>
-            <p className="text-slate-500 text-sm sm:text-base mb-6 sm:mb-8 leading-relaxed">
-              Monte no réptil veloz Skaarl, empunhe o machado lendário e lute em uma arena épica 3D cheia de ação, fúria e ondas de inimigos!
-            </p>
-          </div>
-          <div className="flex flex-col gap-2.5">
-            <button 
-              id="featured-download-btn-5"
-              disabled
-              className="w-full bg-slate-200 text-slate-500 rounded-xl py-3.5 px-4 font-bold flex items-center justify-center gap-2 transition-all cursor-not-allowed shadow-sm min-h-[48px]"
-            >
-              <Play className="w-5 h-5 fill-current shrink-0" /> Em breve no AI Studio
-            </button>
-            <button 
-              id="featured-web-preview-btn-5"
-              disabled
-              className="w-full bg-slate-50 text-slate-400 rounded-xl py-2 font-medium flex items-center justify-center gap-1.5 transition-colors cursor-not-allowed text-xs min-h-[36px]"
-            >
-              <Gamepad2 className="w-3.5 h-3.5 shrink-0" /> Prévia indisponível
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-};
 
 interface OtherGamesProps {
   activeCategory?: string;
@@ -382,26 +207,112 @@ interface OtherGamesProps {
 
 const OtherGames: React.FC<OtherGamesProps> = ({ 
   activeCategory: propActiveCategory, 
-  setActiveCategory: propSetActiveCategory 
+  setActiveCategory: propSetActiveCategory,
 }) => {
+  const navigate = useNavigate();
+  const [games, setGames] = useState<any[]>(otherGames);
+  const [loading, setLoading] = useState(false);
   const [internalCategory, setInternalCategory] = useState('Todos');
   const activeCategory = propActiveCategory ?? internalCategory;
   const setActiveCategory = propSetActiveCategory ?? setInternalCategory;
   const [searchQuery, setSearchQuery] = useState('');
-  const categories = ['Todos', 'Ação', 'Casual', 'Corrida'];
   
-  const filteredGames = otherGames.filter(game => {
+  useEffect(() => {
+    try {
+      const q = query(collection(db, 'games'), orderBy('order', 'asc'));
+      const unsub = onSnapshot(q, (snap) => {
+        if (!snap.empty) {
+          const remoteGames = snap.docs.map(doc => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              // Fallback for iframeUrl if title contains cobra and iframeUrl is empty
+              iframeUrl: data.iframeUrl || (data.title?.toLowerCase().includes('cobra') ? '/cobra-pro-max.html' : '')
+            };
+          });
+          setGames(remoteGames);
+        } else {
+          setGames(otherGames);
+        }
+        setLoading(false);
+      }, (err) => {
+        console.warn('Error fetching Firestore games, using local catalog:', err);
+        setGames(otherGames);
+        setLoading(false);
+      });
+      return unsub;
+    } catch (err) {
+      console.warn('Failed to setup games listener:', err);
+      setLoading(false);
+    }
+  }, []);
+
+  const categories = useMemo(() => {
+    const cats = new Set(['Todos']);
+    games.forEach(g => {
+      if (g && g.category) cats.add(g.category);
+    });
+    return Array.from(cats);
+  }, [games]);
+  
+  const filteredGames = games.filter(game => {
+    if (!game) return false;
     const matchesCategory = activeCategory === 'Todos' || game.category === activeCategory;
-    const matchesSearch = game.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const titleStr = String(game.title || '');
+    const matchesSearch = titleStr.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
+  const handlePlayGame = (game: any) => {
+    if (game?.id) {
+      navigate(`/game/${game.id}`);
+    }
+  };
+
+  const handleStoreClick = (game: any, store: 'play' | 'apple') => {
+    const titleStr = String(game?.title || 'game');
+    const url = store === 'play' ? game?.playStoreUrl : game?.appStoreUrl;
+    if (url) {
+      try {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } catch (e) {
+        console.warn('Could not open store url:', e);
+      }
+    } else {
+      const query = encodeURIComponent(titleStr);
+      const searchUrl = store === 'play' 
+        ? `https://play.google.com/store/search?q=${query}&c=apps`
+        : `https://apps.apple.com/search?term=${query}`;
+      try {
+        window.open(searchUrl, '_blank', 'noopener,noreferrer');
+      } catch (e) {
+        console.warn('Could not open search url:', e);
+      }
+    }
+    try {
+      const slug = String(game?.id || titleStr).replace(/[^a-zA-Z0-9_\-]/g, '_').toLowerCase();
+      AnalyticsService.trackGameClick(`${slug}_${store}store`);
+    } catch (e) {
+      console.warn('Track game click error:', e);
+    }
+  };
+
+  if (loading && games.length === 0) {
+    return (
+      <div className="py-20 flex flex-col items-center justify-center gap-4">
+        <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Sincronizando Catálogo...</p>
+      </div>
+    );
+  }
+
   return (
-    <section id="categorias" className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 max-w-7xl mx-auto border-t border-slate-100">
+    <section id="jogos" className="py-14 sm:py-20 md:py-24 px-4 sm:px-6 max-w-7xl mx-auto border-t border-slate-100">
       <div className="mb-8 sm:mb-12 md:flex items-end justify-between">
         <div className="max-w-2xl">
-          <h2 className="text-blue-600 font-bold tracking-wide uppercase text-xs sm:text-sm mb-2 sm:mb-3">Mais conteúdo do nosso estúdio</h2>
-          <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-3 sm:mb-4">Um portfólio que os jogadores adoram.</h3>
+          <h2 className="text-blue-600 font-bold tracking-wide uppercase text-xs sm:text-sm mb-2 sm:mb-3">Nossos Jogos</h2>
+          <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-3 sm:mb-4">Explore nossa coleção completa.</h3>
           <p className="text-sm sm:text-base md:text-lg text-slate-500">
             Uma seleção dos nossos títulos de maior sucesso. Encontre o catálogo completo nas nossas páginas de desenvolvedor na Google Play e na App Store.
           </p>
@@ -442,18 +353,76 @@ const OtherGames: React.FC<OtherGamesProps> = ({
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-30px" }}
               transition={{ duration: 0.4, delay: Math.min(idx * 0.05, 0.3) }}
-              className="group p-4 sm:p-5 rounded-2xl border border-slate-100 hover:border-blue-100 hover:shadow-lg hover:shadow-blue-50/50 transition-all bg-white flex items-start gap-3.5 sm:gap-4"
+              className="group p-4 sm:p-5 rounded-2xl border border-slate-100 hover:border-blue-100 hover:shadow-lg hover:shadow-blue-50/50 transition-all bg-white flex flex-col gap-4"
             >
-              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-slate-50 rounded-xl flex items-center justify-center shrink-0 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                <Gamepad2 className="w-6 h-6 sm:w-7 sm:h-7" />
+              <div className="flex items-start gap-3.5 sm:gap-4">
+                <div className="relative w-12 h-12 sm:w-14 sm:h-14 bg-slate-50 rounded-xl flex items-center justify-center shrink-0 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors overflow-hidden">
+                  {game.image ? (
+                    <img src={game.image} alt={game.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <Gamepad2 className="w-6 h-6 sm:w-7 sm:h-7" />
+                  )}
+                  {game.isUnderMaintenance && (
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] flex items-center justify-center text-amber-300" title="Jogo em Manutenção">
+                      <Wrench className="w-5 h-5 animate-pulse" />
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="font-bold text-slate-900 text-sm sm:text-base mb-1 truncate flex items-center gap-1.5">
+                    <span className="truncate">{game.title}</span>
+                  </h4>
+                  <div className="text-xs sm:text-sm text-slate-500 font-medium mb-1 truncate">{game.stats}</div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md inline-block">{game.category}</span>
+                    {game.isUnderMaintenance && (
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300/60 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
+                        <Wrench className="w-2.5 h-2.5 text-amber-600" /> Em Manutenção
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <h4 className="font-bold text-slate-900 text-sm sm:text-base mb-1 truncate">{game.title}</h4>
-                <div className="text-xs sm:text-sm text-slate-500 font-medium mb-1 truncate">{game.stats}</div>
-                <div className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md inline-block">{game.category}</div>
-                <div className="flex flex-wrap gap-2 sm:gap-3 mt-2">
-                  <span className="text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1 min-h-[30px]"><PlaySquare className="w-3.5 h-3.5 shrink-0"/> Google Play</span>
-                  <span className="text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1 min-h-[30px]"><Apple className="w-3.5 h-3.5 shrink-0"/> App Store</span>
+
+              {game.isUnderMaintenance && (
+                <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl p-2.5 flex items-start gap-2 text-xs text-amber-800">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="line-clamp-2 leading-tight">
+                    {game.maintenanceMessage || 'Este jogo está em manutenção temporária para melhorias. Voltaremos em breve!'}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3 mt-auto">
+                {game.isUnderMaintenance ? (
+                  <button
+                    onClick={() => handlePlayGame(game)}
+                    className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-2.5 font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm shadow-sm shadow-amber-500/20"
+                    title="Jogo em manutenção. Clique para ver detalhes."
+                  >
+                    <Wrench className="w-4 h-4" /> Em Manutenção
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handlePlayGame(game)}
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-2.5 font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm shadow-sm"
+                  >
+                    <Play className="w-4 h-4 fill-current" /> Jogar Agora
+                  </button>
+                )}
+                <div className="flex items-center justify-center gap-4">
+                  <span 
+                    onClick={() => handleStoreClick(game, 'play')}
+                    className="text-[10px] sm:text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1 transition-colors"
+                  >
+                    <PlaySquare className="w-3 h-3 shrink-0"/> Google Play
+                  </span>
+                  <span 
+                    onClick={() => handleStoreClick(game, 'apple')}
+                    className="text-[10px] sm:text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1 transition-colors"
+                  >
+                    <Apple className="w-3 h-3 shrink-0"/> App Store
+                  </span>
                 </div>
               </div>
             </motion.div>
@@ -690,6 +659,25 @@ const ContactAndFooter = ({
   );
 };
 
+// Route Guard declarativo para proteção estrita do Painel do Proprietário
+const ProtectedAdminRoute = () => {
+  const { isAdmin, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/admin/login" replace />;
+  }
+
+  return <AdminPage />;
+};
+
 export default function App() {
   const location = useLocation();
 
@@ -698,19 +686,19 @@ export default function App() {
   }, [location.pathname]);
 
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/admin" element={<AdminPage />} />
-      <Route path="/admin/login" element={<AdminLoginPage />} />
-    </Routes>
+    <ErrorBoundary>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/game/:gameId" element={<GamePlayerPage />} />
+        <Route path="/admin" element={<ProtectedAdminRoute />} />
+        <Route path="/admin/login" element={<AdminLoginPage />} />
+      </Routes>
+      <ToastNotification />
+    </ErrorBoundary>
   );
 }
 
 function Home() {
-  const [isCobraProMaxOpen, setIsCobraProMaxOpen] = useState(false);
-  const [isTurboRushOpen, setIsTurboRushOpen] = useState(false);
-  const [isDeskRacerOpen, setIsDeskRacerOpen] = useState(false);
-  const [isKledOpen, setIsKledOpen] = useState(false);
   const [isCookiePolicyOpen, setIsCookiePolicyOpen] = useState(false);
   const [isPrivacyPolicyOpen, setIsPrivacyPolicyOpen] = useState(false);
   const [isTermsOfUseOpen, setIsTermsOfUseOpen] = useState(false);
@@ -721,7 +709,7 @@ function Home() {
     if (catName) {
       setSelectedCategory(catName);
     }
-    const el = document.getElementById('categorias');
+    const el = document.getElementById('jogos');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
     }
@@ -766,17 +754,13 @@ function Home() {
       <Navbar />
       <main>
         <HeroAndStats onNavigateToCategory={handleNavigateToCategory} />
-        <FeaturedGames 
-          onOpenCobraProMax={() => setIsCobraProMaxOpen(true)}
-          onOpenTurboRush={() => setIsTurboRushOpen(true)} 
-          onOpenDeskRacer={() => setIsDeskRacerOpen(true)}
-          onOpenKled={() => setIsKledOpen(true)}
-        />
         <OtherGames 
           activeCategory={selectedCategory} 
           setActiveCategory={setSelectedCategory} 
         />
       </main>
+
+
       <ContactAndFooter 
         onOpenCookiePolicy={() => setIsCookiePolicyOpen(true)}
         onOpenCookiePreferences={() => setIsCookiePreferencesOpen(true)}
@@ -784,30 +768,6 @@ function Home() {
         onOpenTermsOfUse={() => setIsTermsOfUseOpen(true)}
       />
       
-      {/* Cobra Pro Max Game Modal */}
-      <CobraProMaxModal 
-        isOpen={isCobraProMaxOpen} 
-        onClose={() => setIsCobraProMaxOpen(false)} 
-      />
-
-      {/* Turbo Rush Game Modal */}
-      <TurboRushModal 
-        isOpen={isTurboRushOpen} 
-        onClose={() => setIsTurboRushOpen(false)} 
-      />
-
-      {/* Desk Racer Game Modal */}
-      <DeskRacerModal 
-        isOpen={isDeskRacerOpen} 
-        onClose={() => setIsDeskRacerOpen(false)} 
-      />
-
-      {/* Kled 3D Game Modal */}
-      <KledModal 
-        isOpen={isKledOpen} 
-        onClose={() => setIsKledOpen(false)} 
-      />
-
       {/* Complete Cookie Policy Modal */}
       <CookiePolicyModal 
         isOpen={isCookiePolicyOpen}

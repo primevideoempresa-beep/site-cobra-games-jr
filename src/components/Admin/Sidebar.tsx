@@ -29,13 +29,15 @@ interface SidebarProps {
 
 const menuItems = [
   { id: 'overview', label: 'Visão Geral', icon: LayoutDashboard },
+  { id: 'manage_games', label: 'Gerenciar Jogos', icon: Gamepad2 },
+  { id: 'manage_banners', label: 'Gerenciar Banners', icon: LayoutDashboard },
+  { id: 'game_stats', label: 'Estatísticas dos Jogos', icon: BarChart3 },
   { id: 'realtime', label: 'Acessos em Tempo Real', icon: Activity },
   { id: 'visitors', label: 'Visitantes', icon: Users },
-  { id: 'games', label: 'Estatísticas dos Jogos', icon: Gamepad2 },
-  { id: 'reports', label: 'Relatórios', icon: BarChart3 },
   { id: 'activity', label: 'Eventos e Atividades', icon: History },
+  { id: 'system_test', label: 'Auditoria & Testes', icon: ShieldCheck },
+  { id: 'security', label: 'Segurança & 2FA', icon: ShieldCheck },
   { id: 'settings', label: 'Configurações', icon: Settings },
-  { id: 'security', label: 'Segurança', icon: ShieldCheck },
 ];
 
 export const Sidebar = React.memo<SidebarProps>(({ activeTab, setActiveTab, onLogout, isOpen, onClose }) => {

@@ -6,20 +6,35 @@ import { AnalyticsService } from './services/analytics';
 import App from './App.tsx';
 import './index.css';
 
+import { ErrorBoundary } from './components/ErrorBoundary';
+
 const Root = () => {
   useEffect(() => {
-    AnalyticsService.init();
+    try {
+      AnalyticsService.init().catch((err) => {
+        console.warn('[Analytics] Init background error:', err);
+      });
+    } catch (e) {
+      console.warn('[Analytics] Init synchronous error:', e);
+    }
   }, []);
 
   return (
     <StrictMode>
-      <BrowserRouter>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </BrowserRouter>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </BrowserRouter>
+      </ErrorBoundary>
     </StrictMode>
   );
 };
 
-createRoot(document.getElementById('root')!).render(<Root />);
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  createRoot(rootElement).render(<Root />);
+} else {
+  console.error('[COBRA GAMES JR] Elemento #root não foi encontrado no DOM.');
+}

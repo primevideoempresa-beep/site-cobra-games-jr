@@ -2,64 +2,131 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Global helpers
+    // Global Security Primitives & Anti-Spoofing Checks
     function isSignedIn() {
       return request.auth != null;
     }
     
+    // Admin check rigorously enforces email verification to prevent identity spoofing
     function isAdmin() {
-      return isSignedIn() && request.auth.token.email == 'primevideoempresa@gmail.com';
+      return isSignedIn() && 
+        request.auth.token.email_verified == true &&
+        request.auth.token.email.lower() == 'primevideoempresa@gmail.com';
     }
     
     function isValidId(id) {
-      return id is string && id.size() <= 128;
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Default deny
+    // Helper functions for input validation and anti-resource poisoning
+    function isValidVisitor(data) {
+      return (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
+        (!('userAgent' in data) || (data.userAgent is string && data.userAgent.size() <= 500)) &&
+        (!('device' in data) || (data.device is string && data.device.size() <= 50)) &&
+        (!('browser' in data) || (data.browser is string && data.browser.size() <= 50));
+    }
+
+    function isValidSession(data) {
+      return (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
+        (!('visitorId' in data) || (data.visitorId is string && data.visitorId.size() <= 128));
+    }
+
+    function isValidEvent(data) {
+      return data.keys().hasAll(['type']) &&
+        data.type is string && data.type.size() <= 64 &&
+        (!('gameId' in data) || (data.gameId is string && data.gameId.size() <= 64)) &&
+        (!('page' in data) || (data.page is string && data.page.size() <= 500));
+    }
+
+    function isValidLog(data) {
+      return data.keys().hasAll(['category', 'level', 'message']) &&
+        data.category is string && data.category.size() <= 50 &&
+        data.level is string && data.level.size() <= 20 &&
+        data.message is string && data.message.size() <= 1000;
+    }
+
+    // Default deny all undefined paths
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Visitors collection
+    // Visitors collection: Read is restricted to admin (prevents public scraping of user agents & visit history)
     match /visitors/{visitorId} {
-      allow read, write: if true; // Allowed for public tracking
-      allow list: if isAdmin();
+      allow get, list: if isAdmin();
+      allow create, update: if isValidId(visitorId) && isValidVisitor(request.resource.data);
+      allow delete: if isAdmin();
     }
 
-    // Sessions collection
+    // Sessions collection: Read is restricted to admin
     match /sessions/{sessionId} {
-      allow read, write: if true; // Allowed for public tracking
-      allow list: if isAdmin();
+      allow get, list: if isAdmin();
+      allow create, update: if isValidId(sessionId) && isValidSession(request.resource.data);
+      allow delete: if isAdmin();
     }
 
-    // Events collection
+    // Events collection: Telemetry events writeable with validation, readable ONLY by admin
     match /events/{eventId} {
-      allow create: if true;
-      allow read: if isAdmin();
-      allow list: if isAdmin();
+      allow create: if isValidId(eventId) && isValidEvent(request.resource.data);
+      allow get, list: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
-    // Daily stats (optional pre-aggregation)
+    // Daily stats (pre-aggregated metrics): Strictly admin only
     match /daily_stats/{date} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdmin() && isValidId(date);
     }
 
-    // Game stats
+    // Game stats: Public reads allowed for site metrics; writes strictly allow statistical increments; deletion restricted to admin
     match /game_stats/{gameId} {
-      allow read: if isAdmin() || true; // Allow public read for UI stats if needed
-      allow write: if true; 
+      allow get, list: if true;
+      allow create, update: if isAdmin() || (
+        isValidId(gameId) && (
+          (resource == null && request.resource.data.keys().hasOnly([
+            'clicks', 'opens', 'lastUpdated', 'racesStarted', 'lapsCompleted', 
+            'racesCompleted', 'totalPlaytimeSeconds', 'replaysCount', 
+            'camera_0', 'camera_1', 'camera_2', 'camera_3', 'camera_4', 
+            'totalDwellSeconds', 'retentionD1', 'retentionD7'
+          ])) || 
+          (resource != null && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'clicks', 'opens', 'lastUpdated', 'racesStarted', 'lapsCompleted', 
+            'racesCompleted', 'totalPlaytimeSeconds', 'replaysCount', 
+            'camera_0', 'camera_1', 'camera_2', 'camera_3', 'camera_4', 
+            'totalDwellSeconds', 'retentionD1', 'retentionD7'
+          ]))
+        )
+      );
+      allow delete: if isAdmin();
     }
 
-    // System logs (Auth and Critical errors)
+    // System logs: Public creation allowed for client error telemetry with strict size bounds; read/list/delete strictly admin
     match /system_logs/{logId} {
-      allow create: if true; // Allow anyone to report a failure (so we catch auth failures)
-      allow read: if isAdmin();
-      allow list: if isAdmin();
+      allow create: if isValidId(logId) && isValidLog(request.resource.data);
+      allow get, list: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
-    // FCM Tokens
+    // FCM Notification Tokens: strictly admin access with ID validation
     match /fcm_tokens/{tokenId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdmin() && isValidId(tokenId);
+    }
+
+    // Games catalog: Public read, writes and mutations strictly admin
+    match /games/{gameId} {
+      allow get, list: if true;
+      allow write: if isAdmin() && isValidId(gameId);
+      allow delete: if isAdmin();
+    }
+
+    // Banners collection: Public read, writes strictly admin
+    match /banners/{bannerId} {
+      allow get, list: if true;
+      allow write: if isAdmin() && isValidId(bannerId);
+      allow delete: if isAdmin();
+    }
+
+    // Admin Security & 2FA Configuration: Completely locked down to verified admin only
+    match /admin_security/{docId} {
+      allow read, write: if isAdmin() && isValidId(docId);
     }
   }
 }

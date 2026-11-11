@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
   onAuthStateChanged, 
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   signOut, 
   User,
 } from 'firebase/auth';
@@ -10,14 +9,26 @@ import { auth, googleProvider, requestForToken, onMessageListener } from '../lib
 import { LoggerService } from '../services/logger';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { 
+  getTwoFactorConfig, 
+  verifyTwoFactorToken, 
+  consumeBackupCode 
+} from '../services/twoFactorAuth';
+import { SecuritySessionManager } from '../lib/security';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   isAdmin: boolean;
+  is2FAEnabled: boolean;
+  is2FAPending: boolean;
+  is2FAVerified: boolean;
   error: string | null;
-  login: () => Promise<void>;
+  login: () => Promise<{ requires2FA: boolean }>;
   logout: () => Promise<void>;
+  verify2FACode: (code: string) => Promise<{ success: boolean; error?: string; usedBackupCode?: boolean }>;
+  cancel2FAPending: () => Promise<void>;
+  refresh2FAStatus: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -27,169 +38,312 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+  const [is2FAPending, setIs2FAPending] = useState(false);
+  const [is2FAVerified, setIs2FAVerified] = useState(false);
 
+  // E-mail restrito do proprietário mantido estritamente seguro no escopo de autorização
   const ADMIN_EMAIL = 'primevideoempresa@gmail.com';
+
+  const refresh2FAStatus = async () => {
+    try {
+      const config = await getTwoFactorConfig();
+      const enabled = !!config?.enabled;
+      setIs2FAEnabled(enabled);
+    } catch {
+      // Falha silenciosa para evitar travamento
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
 
     const initializeAuth = async () => {
-      console.log('[Auth] [INIT_START] Início do processo de inicialização de segurança.');
-      console.log('[Auth] [CONFIG] E-mail autorizado: ', ADMIN_EMAIL);
-      
-      let redirectChecked = false;
-      let firstAuthStateFired = false;
-
-      const checkComplete = () => {
-        if (redirectChecked && firstAuthStateFired) {
-          console.log('[Auth] [INIT_FINISH] Ambas verificações (Redirect + State) concluídas. Liberando UI.');
-          setLoading(false);
-        }
-      };
-
       try {
-        // 1. Process redirect result first if any
-        console.log('[Auth] [REDIRECT_CHECK] Verificando se o usuário retornou de um login do Google...');
-        const result = await getRedirectResult(auth);
-        
-        if (result?.user) {
-          const userEmail = result.user.email;
-          console.log('[Auth] [REDIRECT_RESULT] Usuário recuperado via redirecionamento:', userEmail);
-          
-          if (userEmail?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-            console.log('[Auth] [REDIRECT_VALIDATION] SUCESSO: Administrador identificado via retorno do Google.');
-            await LoggerService.logAuthEvent('Sucesso na validação de redirecionamento', 'info', null, userEmail);
-            if (isMounted) setUser(result.user);
-          } else {
-            console.warn(`[Auth] [REDIRECT_VALIDATION] FALHA: E-mail ${userEmail} não é o proprietário. Desconectando por segurança.`);
-            await LoggerService.logAuthEvent('Tentativa de acesso negada (Redirecionamento)', 'warn', { attemptedEmail: userEmail }, userEmail);
-            await signOut(auth);
-            if (isMounted) {
+        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+          if (!isMounted) return;
+
+          try {
+            if (currentUser) {
+              const currentEmail = currentUser.email?.toLowerCase();
+              
+              if (currentEmail === ADMIN_EMAIL.toLowerCase()) {
+                setUser(currentUser);
+                setError(null);
+
+                // Check 2FA requirement
+                const config = await getTwoFactorConfig();
+                const enabled = !!config?.enabled;
+                setIs2FAEnabled(enabled);
+
+                if (enabled) {
+                  // Validar se existe sessão ativa e dentro do prazo seguro
+                  const isValidSession = SecuritySessionManager.isSessionValid(currentUser.uid);
+                  if (isValidSession) {
+                    setIs2FAVerified(true);
+                    setIs2FAPending(false);
+                  } else {
+                    setIs2FAVerified(false);
+                    setIs2FAPending(true);
+                  }
+                } else {
+                  setIs2FAVerified(true);
+                  setIs2FAPending(false);
+                }
+              } else {
+                // Registrar tentativa de acesso não autorizada com higienização de logs
+                await LoggerService.logAuthEvent('Tentativa de acesso com credencial não autorizada', 'critical', {
+                  authProvider: currentUser.providerData?.[0]?.providerId || 'google'
+                }, currentEmail);
+                
+                await signOut(auth);
+                SecuritySessionManager.clearAdminSession();
+                setUser(null);
+                setIs2FAVerified(false);
+                setIs2FAPending(false);
+                // Mensagem neutra que não expõe detalhes de contas legítimas
+                setError('Acesso restrito. Esta conta não possui privilégios administrativos autorizados no sistema.');
+              }
+            } else {
+              SecuritySessionManager.clearAdminSession();
               setUser(null);
-              setError(`Acesso negado: ${userEmail} não possui permissões administrativas.`);
+              setIs2FAVerified(false);
+              setIs2FAPending(false);
             }
+          } catch {
+            setError('Erro ao validar sessão de segurança. Tente novamente.');
+          } finally {
+            setLoading(false);
           }
-        } else {
-          console.log('[Auth] [REDIRECT_RESULT] Nenhum login via redirecionamento detectado nesta sessão.');
-        }
-      } catch (err: any) {
-        console.error('[Auth] [REDIRECT_ERROR] Erro ao processar retorno do Google:', err.code, err.message);
-        await LoggerService.logAuthEvent('Erro crítico no redirecionamento', 'critical', { code: err.code, message: err.message });
-        if (isMounted) {
-          if (err.code === 'auth/credential-already-in-use') {
-            setError('Esta conta de e-mail já está sendo usada em outro lugar.');
-          } else {
-            setError(`Falha no redirecionamento: ${err.message}`);
-          }
-        }
-      } finally {
-        redirectChecked = true;
-        checkComplete();
+        }, () => {
+          setError('Falha na conexão com o serviço de segurança.');
+          setLoading(false);
+        });
+
+        return unsubscribe;
+      } catch {
+        setError('Falha ao inicializar subsistema de segurança.');
+        setLoading(false);
+        return () => {};
       }
-
-      // 2. Set up the auth state listener
-      console.log('[Auth] [OBSERVER_START] Registrando onAuthStateChanged para monitorar a sessão.');
-      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-        if (!isMounted) return;
-
-        console.log('[Auth] [SESSION_EVENT] O estado da sessão foi alterado.');
-        
-        if (currentUser) {
-          const currentEmail = currentUser.email;
-          console.log('[Auth] [SESSION_ACTIVE] Usuário atual na sessão:', currentEmail);
-          
-          if (currentEmail?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) {
-            console.log('[Auth] [SESSION_VALIDATION] SUCESSO: Sessão administrativa ativa para:', currentEmail);
-            // We don't log every session heartbeat to avoid spam, but we could log the initial recovery
-            setUser(currentUser);
-            setError(null);
-          } else {
-            console.warn(`[Auth] [SESSION_VALIDATION] SEGURANÇA: E-mail ${currentEmail} não autorizado. Forçando encerramento de sessão.`);
-            await LoggerService.logAuthEvent('Acesso bloqueado por e-mail não autorizado na sessão', 'critical', { currentEmail }, currentEmail);
-            await signOut(auth);
-            setUser(null);
-            setError(`Acesso bloqueado: apenas ${ADMIN_EMAIL} pode acessar esta área.`);
-          }
-        } else {
-          console.log('[Auth] [SESSION_INACTIVE] Nenhuma sessão ativa encontrada (usuário nulo).');
-          setUser(null);
-        }
-        
-        if (!firstAuthStateFired) {
-          firstAuthStateFired = true;
-          checkComplete();
-        }
-      });
-
-      return unsubscribe;
     };
 
-    const cleanupPromise = initializeAuth();
+    const unsubscribePromise = initializeAuth();
 
     return () => {
       isMounted = false;
-      cleanupPromise.then(unsub => unsub && typeof unsub === 'function' && unsub());
+      unsubscribePromise.then(unsub => {
+        if (typeof unsub === 'function') unsub();
+      }).catch(() => {});
     };
   }, []);
 
-  const login = async () => {
+  const login = async (): Promise<{ requires2FA: boolean }> => {
     setError(null);
     setLoading(true);
-    try {
-      console.log('[Auth] Iniciando login com redirecionamento para', ADMIN_EMAIL);
-      await signInWithRedirect(auth, googleProvider);
-    } catch (err: any) {
-      console.error('[Auth] Erro ao iniciar login:', err);
-      setError(`Erro ao iniciar login: ${err.message}`);
+
+    // Verificar se há bloqueio temporário por tentativas excessivas de 2FA
+    const lockout = SecuritySessionManager.checkLockout();
+    if (lockout.isLocked) {
       setLoading(false);
+      setError(`Muitas tentativas incorretas. Por segurança, aguarde ${lockout.remainingSeconds}s antes de tentar novamente.`);
+      return { requires2FA: false };
+    }
+
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const userEmail = result.user.email?.toLowerCase();
+      
+      if (userEmail !== ADMIN_EMAIL.toLowerCase()) {
+        await LoggerService.logAuthEvent('Bloqueio no login: conta não autorizada', 'critical', {
+          authProvider: 'google.com'
+        }, userEmail);
+
+        await signOut(auth);
+        SecuritySessionManager.clearAdminSession();
+        setUser(null);
+        setIs2FAPending(false);
+        setIs2FAVerified(false);
+        setError('Acesso negado. Credenciais não autorizadas para o painel de controle.');
+        return { requires2FA: false };
+      }
+
+      setUser(result.user);
+
+      // Check if 2FA is active
+      const config = await getTwoFactorConfig();
+      const enabled = !!config?.enabled;
+      setIs2FAEnabled(enabled);
+
+      if (enabled) {
+        const isValidSession = SecuritySessionManager.isSessionValid(result.user.uid);
+        if (isValidSession) {
+          setIs2FAVerified(true);
+          setIs2FAPending(false);
+          return { requires2FA: false };
+        } else {
+          setIs2FAVerified(false);
+          setIs2FAPending(true);
+          return { requires2FA: true };
+        }
+      } else {
+        setIs2FAVerified(true);
+        setIs2FAPending(false);
+        return { requires2FA: false };
+      }
+    } catch (err: any) {
+      if (err.code === 'auth/popup-blocked') {
+        setError('O popup de login foi bloqueado pelo seu navegador. Por favor, permita popups para este site.');
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setError('Janela de autenticação cancelada pelo usuário.');
+      } else {
+        setError('Não foi possível autenticar. Verifique sua conexão e tente novamente.');
+      }
+      return { requires2FA: false };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verify2FACode = async (code: string): Promise<{ success: boolean; error?: string; usedBackupCode?: boolean }> => {
+    if (!user) {
+      return { success: false, error: 'Sessão expirada. Faça login novamente com o Google.' };
+    }
+
+    // Verificar bloqueio temporário anti-brute force
+    const lockout = SecuritySessionManager.checkLockout();
+    if (lockout.isLocked) {
+      return { 
+        success: false, 
+        error: `Tentativas bloqueadas temporariamente por segurança. Aguarde ${lockout.remainingSeconds}s.` 
+      };
+    }
+
+    try {
+      const config = await getTwoFactorConfig();
+      if (!config || !config.enabled) {
+        SecuritySessionManager.setAdminSession(user.uid);
+        SecuritySessionManager.resetFailedAttempts();
+        setIs2FAVerified(true);
+        setIs2FAPending(false);
+        return { success: true };
+      }
+
+      // Check TOTP code
+      const isTotpValid = verifyTwoFactorToken(config.secret, code);
+      if (isTotpValid) {
+        SecuritySessionManager.setAdminSession(user.uid);
+        SecuritySessionManager.resetFailedAttempts();
+        setIs2FAVerified(true);
+        setIs2FAPending(false);
+        setError(null);
+        await LoggerService.logAuthEvent('Autenticação 2FA verificada com sucesso', 'info', { method: 'totp' });
+        return { success: true };
+      }
+
+      // Check emergency backup code
+      const isBackupValid = await consumeBackupCode(code);
+      if (isBackupValid) {
+        SecuritySessionManager.setAdminSession(user.uid);
+        SecuritySessionManager.resetFailedAttempts();
+        setIs2FAVerified(true);
+        setIs2FAPending(false);
+        setError(null);
+        await LoggerService.logAuthEvent('Autenticação 2FA efetuada via Código de Backup', 'warn', { method: 'backup_code' });
+        return { success: true, usedBackupCode: true };
+      }
+
+      // Falha na verificação: registrar tentativa e verificar se deve bloquear
+      const failureResult = SecuritySessionManager.recordFailed2FAAttempt();
+      if (failureResult.locked) {
+        await LoggerService.logAuthEvent('Bloqueio temporário anti-bruteforce ativado no 2FA', 'critical', {
+          failedConsecutiveAttempts: 5
+        });
+        return {
+          success: false,
+          error: `Muitas tentativas inválidas consecutivas. O acesso foi bloqueado por ${failureResult.waitSeconds} segundos.`
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Código inválido ou expirado. Verifique os dígitos no aplicativo ou utilize um código de emergência.',
+      };
+    } catch {
+      return { success: false, error: 'Erro ao validar código. Verifique sua conexão e tente novamente.' };
+    }
+  };
+
+  const cancel2FAPending = async () => {
+    try {
+      SecuritySessionManager.clearAdminSession();
+      setIs2FAPending(false);
+      setIs2FAVerified(false);
+      await signOut(auth);
+      setUser(null);
+    } catch {
+      // Fallback
     }
   };
 
   const logout = async () => {
     try {
-      console.log('[Auth] Executando logout...');
+      SecuritySessionManager.clearAdminSession();
+      setIs2FAPending(false);
+      setIs2FAVerified(false);
       await signOut(auth);
       setUser(null);
-    } catch (err: any) {
-      console.error('[Auth] Erro ao sair:', err);
+    } catch {
+      // Fallback
     }
   };
 
   const clearError = () => setError(null);
 
-  const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  // Admin access is strictly granted ONLY when email matches AND 2FA is satisfied
+  const isAdmin = Boolean(
+    user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
+    (!is2FAEnabled || is2FAVerified)
+  );
 
   useEffect(() => {
     if (isAdmin && user) {
       const registerFCM = async () => {
         try {
-          console.log('[Auth] [FCM] Tentando registrar token de notificação...');
           const token = await requestForToken();
           if (token) {
             await setDoc(doc(db, 'fcm_tokens', user.uid), {
               token,
-              email: user.email,
               lastUpdated: serverTimestamp()
             }, { merge: true });
-            console.log('[Auth] [FCM] Token registrado e persistido com sucesso.');
           }
-        } catch (err) {
-          console.error('[Auth] [FCM] Erro ao registrar notificações:', err);
+        } catch {
+          // Silent catch
         }
       };
       
       registerFCM();
 
-      // Set up foreground listener
-      onMessageListener().then((payload: any) => {
-        console.log('[Auth] [FCM] Notificação recebida em primeiro plano:', payload);
-        // We could show a toast here if we want
-      }).catch(err => console.error('[Auth] [FCM] Erro no listener de mensagens:', err));
+      onMessageListener().catch(() => {});
     }
   }, [isAdmin, user]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, error, login, logout, clearError }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      isAdmin, 
+      is2FAEnabled,
+      is2FAPending,
+      is2FAVerified,
+      error, 
+      login, 
+      logout, 
+      verify2FACode,
+      cancel2FAPending,
+      refresh2FAStatus,
+      clearError 
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -202,4 +356,3 @@ export const useAuth = () => {
   }
   return context;
 };
-

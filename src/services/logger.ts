@@ -1,5 +1,6 @@
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { sanitizeLogDetails, maskEmail } from '../lib/security';
 
 export type LogLevel = 'info' | 'warn' | 'error' | 'critical';
 
@@ -15,31 +16,33 @@ export interface SystemLog {
 
 export class LoggerService {
   static async log(log: Omit<SystemLog, 'userAgent' | 'timestamp'>) {
-    // Also log to console for immediate visibility during dev
-    const msg = `[SystemLog] [${log.category.toUpperCase()}] ${log.message}`;
-    if (log.level === 'error' || log.level === 'critical') {
-      console.error(msg, log.details || '');
+    // Sanitize any sensitive details, passwords, tokens or emails before processing
+    const cleanDetails = sanitizeLogDetails(log.details);
+    const cleanMessage = sanitizeLogDetails(log.message) as string;
+    const maskedUserEmail = log.userEmail ? maskEmail(log.userEmail) : null;
+
+    // Suppress verbose logs in non-dev, and sanitize all console outputs
+    if (typeof window !== 'undefined' && (log.level === 'error' || log.level === 'critical')) {
+      console.error(`[SystemAudit] [${log.category.toUpperCase()}] ${cleanMessage}`);
     } else if (log.level === 'warn') {
-      console.warn(msg, log.details || '');
-    } else {
-      console.log(msg, log.details || '');
+      console.warn(`[SystemAudit] [${log.category.toUpperCase()}] ${cleanMessage}`);
     }
 
     try {
+      // Enforce payload length constraint to protect Firestore against flood attacks
+      const serializedDetails = cleanDetails ? JSON.stringify(cleanDetails).slice(0, 1024) : null;
+      
       await addDoc(collection(db, 'system_logs'), {
-        ...log,
-        userAgent: navigator.userAgent,
+        category: log.category,
+        level: log.level,
+        message: cleanMessage.slice(0, 500),
+        details: serializedDetails ? JSON.parse(serializedDetails) : null,
+        userEmail: maskedUserEmail,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 250) : 'Server',
         timestamp: serverTimestamp(),
       });
-      
-      // If the log is critical, it would typically trigger a Cloud Function
-      // which sends the FCM message to the tokens stored in 'fcm_tokens'
-      if (log.level === 'critical') {
-        console.log('[LoggerService] [NOTIFY] Evento crítico registrado. Pronto para acionamento de Push Notification.');
-      }
-    } catch (err) {
-      // If logging itself fails, we just log to console to avoid infinite loops or blocking the UI
-      console.error('[LoggerService] Failed to persist log:', err);
+    } catch {
+      // Silent catch to prevent recursion or UI disruption
     }
   }
 

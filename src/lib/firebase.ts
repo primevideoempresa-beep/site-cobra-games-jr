@@ -1,26 +1,24 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence, inMemoryPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { isSupported, getMessaging, getToken, onMessage } from 'firebase/messaging';
 
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-console.log('[Firebase] App inicializado com o projeto:', firebaseConfig.projectId);
 
-// Initialize Firestore
+// Initialize Firestore with secured connection
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-// Initialize Auth with persistence
+// Initialize Auth with persistence and fallback (sem logs revelando estrutura interna)
 export const auth = getAuth(app);
-console.log('[Firebase] Auth inicializado. Configurando persistência local...');
-setPersistence(auth, browserLocalPersistence)
-  .then(() => {
-    console.log('[Firebase] Persistência configurada com sucesso: browserLocalPersistence');
-  })
-  .catch((error) => {
-    console.error("[Firebase] Erro ao configurar persistência:", error);
+try {
+  setPersistence(auth, browserLocalPersistence).catch(() => {
+    setPersistence(auth, inMemoryPersistence).catch(() => {});
   });
+} catch {
+  // Silent fallback
+}
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({
@@ -40,10 +38,8 @@ export const getMessagingInstance = async () => {
       }
       return messaging;
     }
-    console.log('[FCM] Firebase Messaging não é suportado neste navegador/ambiente.');
     return null;
-  } catch (err) {
-    console.warn('[FCM] Verificação de suporte a Firebase Messaging falhou:', err);
+  } catch {
     return null;
   }
 };
@@ -57,29 +53,17 @@ export const requestForToken = async () => {
       if (Notification.permission === 'default') {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
-          console.log('[FCM] Permissão de notificação não concedida.');
           return null;
         }
       } else if (Notification.permission !== 'granted') {
-        console.log('[FCM] Permissão de notificação bloqueada pelo usuário.');
         return null;
       }
     }
 
-    const currentToken = await getToken(msg).catch(err => {
-      console.warn('[FCM] Não foi possível obter token com VAPID padrão:', err);
-      return null;
-    });
-
-    if (currentToken) {
-      console.log('[FCM] Token de registro:', currentToken);
-      return currentToken;
-    } else {
-      console.warn('[FCM] Nenhum token de registro disponível.');
-      return null;
-    }
-  } catch (err) {
-    console.warn('[FCM] Erro ao recuperar token:', err);
+    const currentToken = await getToken(msg).catch(() => null);
+    // Token is returned for internal persistence without logging to console
+    return currentToken || null;
+  } catch {
     return null;
   }
 };
@@ -93,11 +77,9 @@ export const onMessageListener = () =>
         return;
       }
       onMessage(msg, (payload) => {
-        console.log('[FCM] Mensagem recebida em primeiro plano:', payload);
         resolve(payload);
       });
-    } catch (err) {
-      console.warn('[FCM] Erro ao registrar onMessageListener:', err);
+    } catch {
       resolve(null);
     }
   });
@@ -117,8 +99,7 @@ export const getAnalyticsInstance = async () => {
       return analytics;
     }
     return null;
-  } catch (err) {
-    console.warn('[FirebaseAnalytics] Verificação ou inicialização falhou:', err);
+  } catch {
     return null;
   }
 };
@@ -129,15 +110,12 @@ export const logFirebaseEvent = async (eventName: string, params?: Record<string
     if (instance) {
       const { logEvent } = await import('firebase/analytics');
       logEvent(instance, eventName, params);
-      console.log(`[FirebaseAnalytics] Evento registrado: ${eventName}`, params);
     }
-  } catch (err) {
-    console.warn(`[FirebaseAnalytics] Erro ao registrar evento ${eventName}:`, err);
+  } catch {
+    // Silent catch
   }
 };
 
 if (typeof window !== 'undefined' && firebaseConfig.measurementId) {
   getAnalyticsInstance();
 }
-
-

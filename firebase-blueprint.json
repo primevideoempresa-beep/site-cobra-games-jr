@@ -68,9 +68,73 @@
         "opens": { "type": "integer" },
         "lastUpdated": { "type": "string", "format": "date-time" }
       }
+    },
+    "Game": {
+      "title": "Game",
+      "description": "A game in the catalog.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "stats": { "type": "string" },
+        "category": { "type": "string" },
+        "image": { "type": "string" },
+        "icon": { "type": "string" },
+        "isFeatured": { "type": "boolean" },
+        "playStoreUrl": { "type": "string" },
+        "appStoreUrl": { "type": "string" },
+        "iframeUrl": { "type": "string" },
+        "version": { "type": "string" },
+        "order": { "type": "integer" },
+        "isUnderMaintenance": { "type": "boolean" },
+        "maintenanceMessage": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "category"]
+    },
+    "Banner": {
+      "title": "Banner",
+      "description": "A promotional banner for the home page carousel.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "badge": { "type": "string" },
+        "badgeColor": { "type": "string" },
+        "badgeIcon": { "type": "string", "enum": ["sparkles", "flame", "grid"] },
+        "title": { "type": "string" },
+        "highlight": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "targetId": { "type": "string" },
+        "ctaText": { "type": "string" },
+        "category": { "type": "string" },
+        "active": { "type": "boolean" },
+        "order": { "type": "integer" }
+      },
+      "required": ["title", "imageUrl"]
+    },
+    "AdminSecurity": {
+      "title": "AdminSecurity",
+      "description": "Security and two-factor authentication configuration for the administrator.",
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "secret": { "type": "string" },
+        "backupCodes": { "type": "array" },
+        "usedBackupCodes": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "enabledAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["enabled"]
     }
   },
   "firestore": {
+    "/admin_security/{docId}": {
+      "schema": "AdminSecurity",
+      "description": "Admin security and two-factor authentication configuration."
+    },
     "/visitors/{visitorId}": {
       "schema": "Visitor",
       "description": "Collection of anonymous visitors."
@@ -90,6 +154,14 @@
     "/game_stats/{gameId}": {
       "schema": "GameStats",
       "description": "Aggregated stats for each game."
+    },
+    "/games/{gameId}": {
+      "schema": "Game",
+      "description": "Catalog of games."
+    },
+    "/banners/{bannerId}": {
+      "schema": "Banner",
+      "description": "Promotional banners."
     }
   }
 }
