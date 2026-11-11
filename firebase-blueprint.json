@@ -128,6 +128,17 @@
         "enabledAt": { "type": "string", "format": "date-time" }
       },
       "required": ["enabled"]
+    },
+    "AuthorizedAdmin": {
+      "title": "AuthorizedAdmin",
+      "description": "An authorized administrator record.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string" },
+        "addedAt": { "type": "string", "format": "date-time" },
+        "verified": { "type": "boolean" }
+      },
+      "required": ["role"]
     }
   },
   "firestore": {
@@ -162,6 +173,10 @@
     "/banners/{bannerId}": {
       "schema": "Banner",
       "description": "Promotional banners."
+    },
+    "/authorized_admins/{email}": {
+      "schema": "AuthorizedAdmin",
+      "description": "Whitelist of authorized administrator emails."
     }
   }
 }

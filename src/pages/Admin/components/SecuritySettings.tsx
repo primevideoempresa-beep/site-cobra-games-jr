@@ -90,7 +90,7 @@ export const SecuritySettings: React.FC = () => {
   const handleStartSetup = async () => {
     setIsGeneratingSetup(true);
     try {
-      const targetEmail = user?.email || 'primevideoempresa@gmail.com';
+      const targetEmail = user?.email || '';
       const setup = await generateTwoFactorSetup(targetEmail);
       setSetupData(setup);
       setVerificationCode('');
@@ -122,7 +122,7 @@ export const SecuritySettings: React.FC = () => {
 
   const handleDownloadBackupCodes = (codes: string[]) => {
     const textContent = `COBRA GAMES JR - CÓDIGOS DE RECUPERAÇÃO 2FA (GOOGLE AUTHENTICATOR)\n` +
-      `Administrador: ${maskEmail(user?.email || 'primevideoempresa@gmail.com')}\n` +
+      `Administrador: ${maskEmail(user?.email || '')}\n` +
       `Gerado em: ${new Date().toLocaleString('pt-BR')}\n\n` +
       `Guarde estes códigos em local seguro. Cada código pode ser utilizado uma única vez caso você perca o acesso ao seu smartphone:\n\n` +
       codes.map((c, i) => `${i + 1}. ${c}`).join('\n') +
@@ -381,7 +381,7 @@ export const SecuritySettings: React.FC = () => {
                 </button>
               </div>
               <p className="text-white text-sm font-mono truncate mt-1">
-                {revealEmail ? (user?.email || 'primevideoempresa@gmail.com') : maskEmail(user?.email || 'primevideoempresa@gmail.com')}
+                {revealEmail ? (user?.email || 'Admin') : maskEmail(user?.email || '')}
               </p>
               <span className="text-xs text-emerald-400 mt-0.5 flex items-center gap-1 font-medium">
                 <Check className="w-3.5 h-3.5" /> Verificado

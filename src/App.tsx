@@ -150,7 +150,7 @@ const AdminButton = () => {
   return (
     <Link to="/admin" className="flex items-center gap-2 text-orange-400 hover:text-orange-300 font-bold transition-colors">
       <ShieldCheck className="w-5 h-5" />
-      ADMIN
+      <span>ADMIN</span>
     </Link>
   );
 };
@@ -159,7 +159,7 @@ const HeroAndStats = ({ onNavigateToCategory }: { onNavigateToCategory?: (catego
   <div className="bg-blue-900 pt-16 sm:pt-20">
     <section className="pt-10 sm:pt-14 md:pt-16 pb-8 sm:pb-10 px-4 sm:px-6 max-w-6xl mx-auto text-center">
       <h1 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black tracking-tight text-white mb-3 sm:mb-4 leading-[1.12] break-words text-balance">
-        Jogos para celular que o <span className="text-blue-400">mundo inteiro joga</span>
+        <span>Jogos para celular que o </span><span className="text-blue-400">mundo inteiro joga</span>
       </h1>
       <p className="text-xs xs:text-sm sm:text-base md:text-lg text-blue-100 mb-5 sm:mb-8 max-w-2xl mx-auto leading-relaxed px-1">
         A COBRA GAMES JR é uma editora de jogos casuais para dispositivos móveis, sediada no Brasil. De cobras famintas a corridas de supercarros 3D, nossos jogos conquistam milhões de jogadores em todo o mundo.
@@ -348,7 +348,7 @@ const OtherGames: React.FC<OtherGamesProps> = ({
         {filteredGames.length > 0 ? (
           filteredGames.map((game, idx) => (
             <motion.div 
-              key={idx} 
+              key={game.id} 
               initial={{ opacity: 0, y: 15 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-30px" }}
@@ -377,7 +377,7 @@ const OtherGames: React.FC<OtherGamesProps> = ({
                     <span className="text-[11px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md inline-block">{game.category}</span>
                     {game.isUnderMaintenance && (
                       <span className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-300/60 px-2 py-0.5 rounded-md inline-flex items-center gap-1">
-                        <Wrench className="w-2.5 h-2.5 text-amber-600" /> Em Manutenção
+                        <Wrench className="w-2.5 h-2.5 text-amber-600" /> <span>Em Manutenção</span>
                       </span>
                     )}
                   </div>
@@ -400,14 +400,14 @@ const OtherGames: React.FC<OtherGamesProps> = ({
                     className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-2.5 font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm shadow-sm shadow-amber-500/20"
                     title="Jogo em manutenção. Clique para ver detalhes."
                   >
-                    <Wrench className="w-4 h-4" /> Em Manutenção
+                    <Wrench className="w-4 h-4" /> <span>Em Manutenção</span>
                   </button>
                 ) : (
                   <button
                     onClick={() => handlePlayGame(game)}
                     className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-2.5 font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm shadow-sm"
                   >
-                    <Play className="w-4 h-4 fill-current" /> Jogar Agora
+                    <Play className="w-4 h-4 fill-current" /> <span>Jogar Agora</span>
                   </button>
                 )}
                 <div className="flex items-center justify-center gap-4">

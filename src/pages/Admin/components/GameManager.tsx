@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import JSZip from 'jszip';
 import { 
   Plus, 
   Search, 
@@ -14,7 +15,12 @@ import {
   Info,
   Image as ImageIcon,
   Wrench,
-  AlertTriangle
+  AlertTriangle,
+  FileArchive,
+  BarChart3,
+  CheckCircle2,
+  UploadCloud,
+  ChevronRight
 } from 'lucide-react';
 import { 
   collection, 
@@ -27,7 +33,7 @@ import {
   orderBy,
   serverTimestamp 
 } from 'firebase/firestore';
-import { db } from '../../../lib/firebase';
+import { db, auth } from '../../../lib/firebase';
 import { toast } from 'sonner';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -61,6 +67,8 @@ export const GameManager = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingGame, setEditingGame] = useState<Game | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [zipFile, setZipFile] = useState<File | null>(null);
+  const [zipValidation, setZipValidation] = useState<{ valid: boolean; error?: string } | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<Partial<Game>>({
@@ -92,6 +100,8 @@ export const GameManager = () => {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const handleOpenModal = (game?: Game) => {
+    setZipFile(null);
+    setZipValidation(null);
     if (game) {
       setEditingGame(game);
       setFormData({
@@ -121,6 +131,64 @@ export const GameManager = () => {
     setIsModalOpen(true);
   };
 
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<{
+    hasIndex: boolean;
+    missingAssets: string[];
+    dangerousFiles: string[];
+    totalFiles: number;
+    size: number;
+    isApto: boolean;
+  } | null>(null);
+
+  const handleZipChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.zip')) {
+      setZipValidation({ valid: false, error: 'O arquivo deve ser um ZIP.' });
+      return;
+    }
+
+    setIsVerifying(true);
+    setVerificationResult(null);
+    try {
+      const formData = new FormData();
+      formData.append('zip', file);
+
+      const idToken = await auth.currentUser?.getIdToken();
+      const response = await fetch('/api/games/verify', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Erro na verificação');
+      }
+
+      const result = await response.json();
+      setVerificationResult(result);
+      
+      if (result.isApto) {
+        setZipFile(file);
+        setZipValidation({ valid: true });
+        toast.success('ZIP validado com sucesso!');
+      } else {
+        setZipValidation({ valid: false, error: 'O jogo possui falhas críticas.' });
+        toast.error('Falha na verificação automática.');
+      }
+    } catch (err: any) {
+      setZipValidation({ valid: false, error: err.message });
+      toast.error('Erro ao verificar ZIP.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title || !formData.category) {
@@ -130,15 +198,43 @@ export const GameManager = () => {
 
     setIsSaving(true);
     try {
+      let finalIframeUrl = formData.iframeUrl;
+
+      // If a new ZIP is provided, upload and extract it
+      if (zipFile) {
+        const uploadData = new FormData();
+        uploadData.append('zip', zipFile);
+        uploadData.append('title', formData.title);
+
+        const idToken = await auth.currentUser?.getIdToken();
+        const uploadRes = await fetch('/api/games/upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: uploadData,
+        });
+
+        if (!uploadRes.ok) {
+          const error = await uploadRes.json();
+          throw new Error(error.error || 'Erro no upload do jogo');
+        }
+
+        const uploadResult = await uploadRes.json();
+        finalIframeUrl = uploadResult.iframeUrl;
+      }
+
       if (editingGame) {
         await updateDoc(doc(db, 'games', editingGame.id), {
           ...formData,
+          iframeUrl: finalIframeUrl,
           updatedAt: serverTimestamp()
         });
         toast.success('Jogo atualizado com sucesso');
       } else {
         await addDoc(collection(db, 'games'), {
           ...formData,
+          iframeUrl: finalIframeUrl,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
@@ -147,7 +243,7 @@ export const GameManager = () => {
       setIsModalOpen(false);
     } catch (err: any) {
       console.error('Error saving game:', err);
-      toast.error('Erro ao salvar jogo. Verifique suas permissões de administrador.');
+      toast.error(err.message || 'Erro ao salvar jogo.');
     } finally {
       setIsSaving(false);
     }
@@ -179,7 +275,7 @@ export const GameManager = () => {
       setDeletingId(null);
     } catch (err: any) {
       console.error('Error deleting game:', err);
-      toast.error('Erro ao excluir jogo. Verifique suas permissões de administrador.');
+      toast.error('Erro ao excluir jogo.');
     }
   };
 
@@ -202,16 +298,11 @@ export const GameManager = () => {
         updatedAt: serverTimestamp()
       });
       if (nextState) {
-        toast.warning(`Jogo "${game.title}" colocado em MANUTENÇÃO!`, {
-          description: 'Os usuários verão o aviso de manutenção e não poderão iniciar o jogo.'
-        });
+        toast.warning(`Jogo "${game.title}" em MANUTENÇÃO!`);
       } else {
-        toast.success(`Jogo "${game.title}" reativado!`, {
-          description: 'Manutenção encerrada, jogo liberado para os jogadores.'
-        });
+        toast.success(`Jogo "${game.title}" reativado!`);
       }
     } catch (err: any) {
-      console.error('Error toggling maintenance:', err);
       toast.error('Erro ao alterar status de manutenção');
     }
   };
@@ -224,7 +315,7 @@ export const GameManager = () => {
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
       <Loader2 className="w-8 h-8 animate-spin mb-4" />
-      <p className="font-bold uppercase tracking-widest text-xs">Carregando catálogo...</p>
+      <p className="font-bold uppercase tracking-widest text-xs">Sincronizando Catálogo...</p>
     </div>
   );
 
@@ -246,7 +337,7 @@ export const GameManager = () => {
           className="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-2xl font-black flex items-center justify-center gap-2 transition-all shadow-lg shadow-orange-500/20 active:scale-95"
         >
           <Plus className="w-5 h-5" />
-          Adicionar Jogo
+          Novo Jogo
         </button>
       </div>
 
@@ -257,7 +348,6 @@ export const GameManager = () => {
               <tr className="text-zinc-500 text-[10px] uppercase tracking-widest border-b border-zinc-800 bg-zinc-800/20">
                 <th className="px-6 py-4 font-black">Capa</th>
                 <th className="px-6 py-4 font-black">Título / Categoria</th>
-                <th className="px-6 py-4 font-black">Stats</th>
                 <th className="px-6 py-4 font-black text-center">Destaque</th>
                 <th className="px-6 py-4 font-black text-center">Manutenção</th>
                 <th className="px-6 py-4 font-black text-right">Ações</th>
@@ -295,14 +385,10 @@ export const GameManager = () => {
                     </div>
                     <div className="text-[10px] font-black uppercase text-zinc-600 mt-0.5 tracking-tighter">{game.category}</div>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="text-xs text-zinc-400 font-medium truncate max-w-[200px]">{game.stats || '---'}</div>
-                  </td>
                   <td className="px-6 py-4 text-center">
                     <button 
                       onClick={() => toggleFeatured(game)}
                       className={`p-2 rounded-xl transition-all ${game.isFeatured ? 'bg-orange-500/10 text-orange-500' : 'text-zinc-700 hover:text-zinc-400'}`}
-                      title={game.isFeatured ? "Remover dos destaques" : "Destacar jogo"}
                     >
                       <Star className={`w-5 h-5 ${game.isFeatured ? 'fill-current' : ''}`} />
                     </button>
@@ -311,15 +397,12 @@ export const GameManager = () => {
                     <button 
                       onClick={() => toggleMaintenance(game)}
                       className={cn(
-                        "px-3 py-1.5 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 transition-all active:scale-95",
-                        game.isUnderMaintenance 
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-lg shadow-amber-500/10 hover:bg-amber-500/30" 
-                          : "bg-zinc-800/80 text-zinc-400 hover:text-white hover:bg-zinc-700/80 border border-zinc-700/40"
+                        "px-3 py-1.5 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 transition-all",
+                        game.isUnderMaintenance ? "bg-amber-500/20 text-amber-300" : "bg-zinc-800 text-zinc-500"
                       )}
-                      title={game.isUnderMaintenance ? "Jogo atualmente em MANUTENÇÃO. Clique para reativar e liberar para os usuários." : "Jogo operacional. Clique para colocar em MANUTENÇÃO no site."}
                     >
-                      <Wrench className={cn("w-3.5 h-3.5", game.isUnderMaintenance ? "text-amber-400 animate-pulse" : "text-zinc-500")} />
-                      <span>{game.isUnderMaintenance ? 'Em Manutenção' : 'Operacional'}</span>
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>{game.isUnderMaintenance ? 'Ativado' : 'Desativado'}</span>
                     </button>
                   </td>
                   <td className="px-6 py-4">
@@ -327,7 +410,6 @@ export const GameManager = () => {
                       <button 
                         onClick={() => handleOpenModal(game)}
                         className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all"
-                        title="Editar"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
@@ -342,11 +424,8 @@ export const GameManager = () => {
                         }}
                         className={cn(
                           "p-2 rounded-lg transition-all flex items-center gap-1",
-                          deletingId === game.id 
-                            ? "bg-red-600 text-white px-3" 
-                            : "text-zinc-400 hover:text-red-500 hover:bg-red-500/10"
+                          deletingId === game.id ? "bg-red-600 text-white px-3" : "text-zinc-400 hover:text-red-500 hover:bg-red-500/10"
                         )}
-                        title={deletingId === game.id ? "Confirmar Exclusão" : "Excluir"}
                       >
                         <Trash2 className="w-4 h-4" />
                         {deletingId === game.id && <span className="text-[10px] font-black uppercase">Confirmar?</span>}
@@ -356,8 +435,8 @@ export const GameManager = () => {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-zinc-600 italic text-sm">
-                    Nenhum jogo encontrado no catálogo.
+                  <td colSpan={5} className="px-6 py-12 text-center text-zinc-600 italic text-sm">
+                    Nenhum jogo no catálogo.
                   </td>
                 </tr>
               )}
@@ -366,7 +445,6 @@ export const GameManager = () => {
         </div>
       </div>
 
-      {/* Modal Jogo */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsModalOpen(false)} />
@@ -385,263 +463,163 @@ export const GameManager = () => {
 
             <form onSubmit={handleSave} className="p-8 space-y-6 max-h-[70vh] overflow-y-auto no-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* ZIP Upload Section */}
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Upload do Motor de Jogo (Pacote .ZIP)</label>
+                  <div className={cn(
+                    "relative border-2 border-dashed rounded-[2rem] p-8 transition-all flex flex-col items-center justify-center gap-3",
+                    zipValidation?.valid ? "border-emerald-500/50 bg-emerald-500/5" : 
+                    zipValidation?.error ? "border-red-500/50 bg-red-500/5" : 
+                    "border-zinc-800 hover:border-orange-500/50 bg-zinc-800/30"
+                  )}>
+                    <input type="file" accept=".zip" onChange={handleZipChange} className="absolute inset-0 opacity-0 cursor-pointer" />
+                    {zipValidation?.valid ? (
+                      <>
+                        <div className="p-4 bg-emerald-500/20 text-emerald-500 rounded-full"><CheckCircle2 className="w-8 h-8" /></div>
+                        <div className="text-center">
+                          <p className="text-sm font-bold text-white">{zipFile?.name}</p>
+                          <p className="text-xs text-emerald-400 mt-1">Pacote validado com sucesso</p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className={cn("p-4 rounded-full", zipValidation?.error ? "bg-red-500/20 text-red-500" : "bg-zinc-800 text-zinc-500")}>
+                          <UploadCloud className="w-8 h-8" />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-bold text-white">{zipValidation?.error || 'Arraste o arquivo .ZIP do jogo'}</p>
+                          <p className="text-xs text-zinc-500 mt-1">O ZIP deve conter um index.html na raiz</p>
+                        </div>
+                      </>
+                    )}
+                    {isVerifying && (
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center rounded-[2rem]">
+                        <Loader2 className="w-8 h-8 text-orange-500 animate-spin mb-2" />
+                        <p className="text-xs font-black uppercase text-white">Analisando motor do jogo...</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Automatic Verification Results */}
+                  {verificationResult && (
+                    <div className={cn(
+                      "p-5 rounded-2xl border transition-all animate-in fade-in slide-in-from-top-2 duration-300",
+                      verificationResult.isApto ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/20"
+                    )}>
+                      <div className="flex items-center gap-2 mb-4">
+                        <Info className={cn("w-4 h-4", verificationResult.isApto ? "text-emerald-500" : "text-red-500")} />
+                        <h4 className="text-xs font-black uppercase tracking-widest text-zinc-300">Relatório de Verificação</h4>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                          <p className="text-[9px] uppercase font-bold text-zinc-500">Arquivos</p>
+                          <p className="text-sm font-black text-white">{verificationResult.totalFiles}</p>
+                        </div>
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                          <p className="text-[9px] uppercase font-bold text-zinc-500">Tamanho</p>
+                          <p className="text-sm font-black text-white">{(verificationResult.size / 1024 / 1024).toFixed(2)} MB</p>
+                        </div>
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                          <p className="text-[9px] uppercase font-bold text-zinc-500">Entry Point</p>
+                          <p className={cn("text-sm font-black", verificationResult.hasIndex ? "text-emerald-500" : "text-red-500")}>
+                            {verificationResult.hasIndex ? 'OK' : 'AUSENTE'}
+                          </p>
+                        </div>
+                        <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                          <p className="text-[9px] uppercase font-bold text-zinc-500">Segurança</p>
+                          <p className={cn("text-sm font-black", verificationResult.dangerousFiles.length === 0 ? "text-emerald-500" : "text-red-500")}>
+                            {verificationResult.dangerousFiles.length === 0 ? 'LIMPO' : 'ALERTA'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {verificationResult.dangerousFiles.length > 0 && (
+                        <div className="mb-4 p-3 bg-red-500/10 rounded-xl border border-red-500/20">
+                          <p className="text-[10px] font-black text-red-400 uppercase mb-2 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" /> Arquivos Potencialmente Perigosos:
+                          </p>
+                          <ul className="text-[10px] text-red-300/70 space-y-1">
+                            {verificationResult.dangerousFiles.map((file, i) => <li key={i}>• {file}</li>)}
+                          </ul>
+                        </div>
+                      )}
+
+                      {verificationResult.missingAssets.length > 0 && (
+                        <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
+                          <p className="text-[10px] font-black text-amber-400 uppercase mb-2 flex items-center gap-1">
+                            <Search className="w-3 h-3" /> Recursos Ausentes (Possível Falha):
+                          </p>
+                          <ul className="text-[10px] text-amber-300/70 space-y-1 max-h-24 overflow-y-auto">
+                            {verificationResult.missingAssets.map((asset, i) => <li key={i}>• {asset}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Título do Jogo</label>
-                  <input 
-                    required
-                    value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50"
-                  />
+                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Título</label>
+                  <input required value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Categoria</label>
-                  <select 
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50"
-                  >
-                    <option>Ação</option>
-                    <option>Casual</option>
-                    <option>Corrida</option>
-                    <option>Estratégia</option>
+                  <select value={formData.category} onChange={(e) => setFormData({ ...formData, category: e.target.value })} className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50">
+                    <option>Ação</option><option>Casual</option><option>Corrida</option><option>Estratégia</option>
                   </select>
                 </div>
+                
                 <div className="space-y-2 md:col-span-2">
-                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Descrição Curta</label>
-                  <textarea 
-                    rows={2}
-                    value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50 resize-none"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Estatísticas Exibidas (ex: 100M+ downloads)</label>
-                  <input 
-                    value={formData.stats}
-                    onChange={(e) => setFormData({ ...formData, stats: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Versão</label>
-                  <input 
-                    value={formData.version}
-                    onChange={(e) => setFormData({ ...formData, version: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50"
-                  />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Imagem de Capa</label>
-                  <div className="flex flex-col gap-3">
-                    <div className="flex gap-4">
-                      <input 
-                        value={formData.image}
-                        onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                        className="flex-1 bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50 font-mono text-xs"
-                        placeholder="URL da Imagem ou Upload..."
-                      />
-                      <label className="cursor-pointer bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 px-6 py-3 rounded-2xl font-bold text-xs flex items-center gap-2 border border-orange-500/20 transition-all active:scale-95">
-                        <ImageIcon className="w-4 h-4" />
-                        <span>Upload</span>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          className="hidden" 
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setFormData({ ...formData, image: reader.result as string });
-                                toast.success('Capa carregada');
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
-                    {formData.image && (
-                      <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-800/50">
-                        <img src={formData.image} alt="Capa Preview" className="w-full h-full object-cover" />
-                        <button 
-                          type="button"
-                          onClick={() => setFormData({ ...formData, image: '' })}
-                          className="absolute top-2 right-2 p-2 bg-black/50 hover:bg-red-500 text-white rounded-full transition-colors"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
+                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Capa do Jogo</label>
+                  <div className="flex gap-4">
+                    <input value={formData.image} onChange={(e) => setFormData({ ...formData, image: e.target.value })} className="flex-1 bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white text-xs" placeholder="URL ou Upload..." />
+                    <label className="cursor-pointer bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-6 py-3 rounded-2xl font-bold text-xs flex items-center gap-2 border border-zinc-700 transition-all">
+                      <ImageIcon className="w-4 h-4" /><span>Upload</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => { setFormData({ ...formData, image: reader.result as string }); toast.success('Capa carregada'); };
+                          reader.readAsDataURL(file);
+                        }
+                      }} />
+                    </label>
                   </div>
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Ícone do Jogo (1:1)</label>
-                  <div className="flex flex-col gap-3">
-                    <div className="flex gap-4">
-                      <input 
-                        value={formData.icon}
-                        onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                        className="flex-1 bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50 font-mono text-xs"
-                        placeholder="URL do Ícone ou Upload..."
-                      />
-                      <label className="cursor-pointer bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 px-6 py-3 rounded-2xl font-bold text-xs flex items-center gap-2 border border-orange-500/20 transition-all active:scale-95">
-                        <ImageIcon className="w-4 h-4" />
-                        <span>Upload</span>
-                        <input 
-                          type="file" 
-                          accept="image/*" 
-                          className="hidden" 
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                setFormData({ ...formData, icon: reader.result as string });
-                                toast.success('Ícone carregado');
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
-                    {formData.icon && (
-                      <div className="relative w-20 h-20 rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-800/50">
-                        <img src={formData.icon} alt="Ícone Preview" className="w-full h-full object-cover" />
-                        <button 
-                          type="button"
-                          onClick={() => setFormData({ ...formData, icon: '' })}
-                          className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-red-500 text-white rounded-full transition-colors"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Link do Iframe (HTML5 / Local)</label>
-                  <input 
-                    value={formData.iframeUrl}
-                    onChange={(e) => setFormData({ ...formData, iframeUrl: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50 font-mono text-xs"
-                    placeholder="/my-game.html ou https://..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Google Play URL</label>
-                  <input 
-                    value={formData.playStoreUrl}
-                    onChange={(e) => setFormData({ ...formData, playStoreUrl: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50 font-mono text-xs"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">App Store URL</label>
-                  <input 
-                    value={formData.appStoreUrl}
-                    onChange={(e) => setFormData({ ...formData, appStoreUrl: e.target.value })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50 font-mono text-xs"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Ordem de Exibição</label>
-                  <input 
-                    type="number"
-                    value={formData.order}
-                    onChange={(e) => setFormData({ ...formData, order: parseInt(e.target.value) })}
-                    className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-orange-500/50"
-                  />
-                </div>
-                <div className="flex items-center gap-4 px-2 pt-6">
-                  <button 
-                    type="button"
-                    onClick={() => setFormData({ ...formData, isFeatured: !formData.isFeatured })}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all ${formData.isFeatured ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20' : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300'}`}
-                  >
-                    <Star className={`w-4 h-4 ${formData.isFeatured ? 'fill-current' : ''}`} />
-                    Destacar Jogo
-                  </button>
                 </div>
 
-                {/* Bloco de Manutenção do Jogo */}
-                <div className="md:col-span-2 p-5 rounded-2xl bg-zinc-950/60 border border-zinc-800 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <div className={cn(
-                        "p-2.5 rounded-xl shrink-0 mt-0.5 transition-colors",
-                        formData.isUnderMaintenance 
-                          ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" 
-                          : "bg-zinc-800 text-zinc-500"
-                      )}>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Link do Iframe (Entry Point)</label>
+                  <input value={formData.iframeUrl} onChange={(e) => setFormData({ ...formData, iframeUrl: e.target.value })} className="w-full bg-zinc-800 border border-zinc-700 rounded-2xl px-4 py-3 text-white font-mono text-xs" placeholder="/games/meu-jogo/index.html" />
+                </div>
+
+                <div className="md:col-span-2 p-5 rounded-2xl bg-zinc-950/60 border border-zinc-800 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={cn("p-2 rounded-xl", formData.isUnderMaintenance ? "bg-amber-500/20 text-amber-400" : "bg-zinc-800 text-zinc-500")}>
                         <Wrench className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-white flex items-center gap-2">
-                          Status de Manutenção
-                          {formData.isUnderMaintenance && (
-                            <span className="text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/40 px-2 py-0.5 rounded-full uppercase font-black tracking-wider">
-                              Ativo no Site
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-zinc-400 leading-relaxed mt-0.5">
-                          Coloque o jogo em manutenção para alertar os usuários no site e suspender o carregamento até o fim dos reparos.
-                        </p>
+                        <div className="text-sm font-bold text-white">Modo Manutenção</div>
+                        <p className="text-[10px] text-zinc-500">Suspende o acesso público ao jogo</p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setFormData({ ...formData, isUnderMaintenance: !formData.isUnderMaintenance })}
-                      className={cn(
-                        "px-4 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 shrink-0 active:scale-95",
-                        formData.isUnderMaintenance
-                          ? "bg-amber-500 text-black shadow-lg shadow-amber-500/30"
-                          : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-white border border-zinc-700/50"
-                      )}
-                    >
-                      <Wrench className="w-3.5 h-3.5" />
-                      {formData.isUnderMaintenance ? 'Em Manutenção (Ligado)' : 'Ativar Manutenção'}
+                    <button type="button" onClick={() => setFormData({ ...formData, isUnderMaintenance: !formData.isUnderMaintenance })} className={cn("px-4 py-2 rounded-xl font-bold text-xs transition-all", formData.isUnderMaintenance ? "bg-amber-500 text-black" : "bg-zinc-800 text-zinc-400")}>
+                      {formData.isUnderMaintenance ? 'Ligado' : 'Desligado'}
                     </button>
                   </div>
-
                   {formData.isUnderMaintenance && (
-                    <div className="pt-3 border-t border-zinc-800/80 space-y-1.5 animate-in fade-in duration-200">
-                      <label className="text-[10px] uppercase font-black text-amber-400 tracking-widest px-1 flex items-center gap-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5" />
-                        Mensagem de Manutenção para os Jogadores (Opcional)
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.maintenanceMessage || ''}
-                        onChange={(e) => setFormData({ ...formData, maintenanceMessage: e.target.value })}
-                        placeholder="Ex: Estamos realizando melhorias técnicas neste jogo. Voltaremos em breve!"
-                        className="w-full bg-zinc-900 border border-amber-500/40 rounded-xl px-4 py-2.5 text-white text-xs placeholder:text-zinc-600 focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
+                    <input value={formData.maintenanceMessage || ''} onChange={(e) => setFormData({ ...formData, maintenanceMessage: e.target.value })} placeholder="Mensagem de manutenção..." className="w-full bg-zinc-900 border border-amber-500/40 rounded-xl px-4 py-2.5 text-white text-xs" />
                   )}
                 </div>
               </div>
 
               <div className="flex gap-4 pt-4">
-                <button 
-                  type="submit"
-                  disabled={isSaving}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 active:scale-95"
-                >
+                <button type="submit" disabled={isSaving} className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2">
                   {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                  {editingGame ? 'Atualizar Jogo' : 'Criar Jogo'}
+                  {editingGame ? 'Salvar Alterações' : 'Publicar Jogo'}
                 </button>
-                <button 
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black transition-all active:scale-95"
-                >
-                  Cancelar
-                </button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black transition-all">Cancelar</button>
               </div>
             </form>
           </div>

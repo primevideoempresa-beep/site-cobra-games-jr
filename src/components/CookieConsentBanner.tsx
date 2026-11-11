@@ -107,7 +107,7 @@ export const CookieConsentBanner: React.FC<CookieConsentBannerProps> = ({
                     onClick={() => setIsPreferencesOpen(true)}
                     className="text-slate-300 hover:text-white flex items-center gap-1 font-medium cursor-pointer py-1"
                   >
-                    <Settings className="w-3.5 h-3.5" /> Personalizar opções
+                    <Settings className="w-3.5 h-3.5" /> <span>Personalizar opções</span>
                   </button>
                 </div>
               </div>
@@ -126,14 +126,14 @@ export const CookieConsentBanner: React.FC<CookieConsentBannerProps> = ({
                 onClick={() => setIsPreferencesOpen(true)}
                 className="flex-1 sm:flex-initial px-3 sm:px-4 py-2.5 rounded-xl border border-blue-600/50 bg-blue-950/40 hover:bg-blue-900/50 text-blue-200 text-xs sm:text-sm font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 min-h-[42px]"
               >
-                <Settings className="w-4 h-4" /> Preferências
+                <Settings className="w-4 h-4" /> <span>Preferências</span>
               </button>
               <button
                 type="button"
                 onClick={handleAcceptAll}
                 className="w-full sm:w-auto px-4 sm:px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-bold transition-colors cursor-pointer shadow-lg shadow-blue-600/30 flex items-center justify-center gap-1.5 min-h-[42px]"
               >
-                <Check className="w-4 h-4" /> Aceitar Todos
+                <Check className="w-4 h-4" /> <span>Aceitar Todos</span>
               </button>
             </div>
           </div>

@@ -12,7 +12,7 @@ export interface TwoFactorConfig {
   enabledAt?: any;
 }
 
-const ADMIN_EMAIL = 'primevideoempresa@gmail.com';
+
 const ISSUER = 'Cobra Games Jr';
 const TWO_FACTOR_DOC_ID = '2fa';
 const TWO_FACTOR_COLLECTION = 'admin_security';
@@ -54,7 +54,7 @@ export function generateBackupCodes(count = 8): string[] {
 /**
  * Generates a new TOTP secret, URI, and QR Code data URL for Google Authenticator.
  */
-export async function generateTwoFactorSetup(email = ADMIN_EMAIL) {
+export async function generateTwoFactorSetup(email: string) {
   // Generate a random 160-bit (20 byte) secret
   const secret = new OTPAuth.Secret({ size: 20 });
   const base32Secret = secret.base32;
@@ -103,10 +103,6 @@ export function verifyTwoFactorToken(secretBase32: string, token: string): boole
   try {
     const totp = new OTPAuth.TOTP({
       issuer: ISSUER,
-      label: ADMIN_EMAIL,
-      algorithm: 'SHA1',
-      digits: 6,
-      period: 30,
       secret: OTPAuth.Secret.fromBase32(secretBase32),
     });
 

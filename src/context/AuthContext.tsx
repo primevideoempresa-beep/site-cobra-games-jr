@@ -7,7 +7,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, requestForToken, onMessageListener } from '../lib/firebase';
 import { LoggerService } from '../services/logger';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { 
   getTwoFactorConfig, 
@@ -43,7 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [is2FAVerified, setIs2FAVerified] = useState(false);
 
   // E-mail restrito do proprietário mantido estritamente seguro no escopo de autorização
-  const ADMIN_EMAIL = 'primevideoempresa@gmail.com';
+
 
   const refresh2FAStatus = async () => {
     try {
@@ -67,42 +67,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (currentUser) {
               const currentEmail = currentUser.email?.toLowerCase();
               
-              if (currentEmail === ADMIN_EMAIL.toLowerCase()) {
-                setUser(currentUser);
-                setError(null);
+              if (currentEmail) {
+                // Security Pillar: Verify admin identity via Firestore
+                const adminDoc = await getDoc(doc(db, 'authorized_admins', currentEmail));
+                
+                if (adminDoc.exists()) {
+                  setUser(currentUser);
+                  setError(null);
 
-                // Check 2FA requirement
-                const config = await getTwoFactorConfig();
-                const enabled = !!config?.enabled;
-                setIs2FAEnabled(enabled);
+                  // Check 2FA requirement
+                  const config = await getTwoFactorConfig();
+                  const enabled = !!config?.enabled;
+                  setIs2FAEnabled(enabled);
 
-                if (enabled) {
-                  // Validar se existe sessão ativa e dentro do prazo seguro
-                  const isValidSession = SecuritySessionManager.isSessionValid(currentUser.uid);
-                  if (isValidSession) {
+                  if (enabled) {
+                    // Validar se existe sessão ativa e dentro do prazo seguro
+                    const isValidSession = SecuritySessionManager.isSessionValid(currentUser.uid);
+                    if (isValidSession) {
+                      setIs2FAVerified(true);
+                      setIs2FAPending(false);
+                    } else {
+                      setIs2FAVerified(false);
+                      setIs2FAPending(true);
+                    }
+                  } else {
                     setIs2FAVerified(true);
                     setIs2FAPending(false);
-                  } else {
-                    setIs2FAVerified(false);
-                    setIs2FAPending(true);
                   }
                 } else {
-                  setIs2FAVerified(true);
+                  // Registrar tentativa de acesso não autorizada com higienização de logs
+                  await LoggerService.logAuthEvent('Tentativa de acesso com credencial não autorizada', 'critical', {
+                    authProvider: currentUser.providerData?.[0]?.providerId || 'google'
+                  }, currentEmail);
+                  
+                  await signOut(auth);
+                  SecuritySessionManager.clearAdminSession();
+                  setUser(null);
+                  setIs2FAVerified(false);
                   setIs2FAPending(false);
+                  // Mensagem neutra que não expõe detalhes de contas legítimas
+                  setError('Acesso restrito. Esta conta não possui privilégios administrativos autorizados no sistema.');
                 }
               } else {
-                // Registrar tentativa de acesso não autorizada com higienização de logs
-                await LoggerService.logAuthEvent('Tentativa de acesso com credencial não autorizada', 'critical', {
-                  authProvider: currentUser.providerData?.[0]?.providerId || 'google'
-                }, currentEmail);
-                
                 await signOut(auth);
-                SecuritySessionManager.clearAdminSession();
                 setUser(null);
-                setIs2FAVerified(false);
-                setIs2FAPending(false);
-                // Mensagem neutra que não expõe detalhes de contas legítimas
-                setError('Acesso restrito. Esta conta não possui privilégios administrativos autorizados no sistema.');
+                setError('E-mail não fornecido pelo provedor de autenticação.');
               }
             } else {
               SecuritySessionManager.clearAdminSession();
@@ -154,7 +163,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const result = await signInWithPopup(auth, googleProvider);
       const userEmail = result.user.email?.toLowerCase();
       
-      if (userEmail !== ADMIN_EMAIL.toLowerCase()) {
+      if (!userEmail) {
+        await signOut(auth);
+        setError('Falha ao obter e-mail da conta Google.');
+        return { requires2FA: false };
+      }
+
+      // Security Pillar: Verify admin identity via Firestore
+      const adminDoc = await getDoc(doc(db, 'authorized_admins', userEmail));
+
+      if (!adminDoc.exists()) {
         await LoggerService.logAuthEvent('Bloqueio no login: conta não autorizada', 'critical', {
           authProvider: 'google.com'
         }, userEmail);
@@ -300,10 +318,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearError = () => setError(null);
 
-  // Admin access is strictly granted ONLY when email matches AND 2FA is satisfied
+  // Admin access is strictly granted when user is authenticated (verified against authorized_admins in effect) 
+  // AND 2FA is satisfied (if enabled)
   const isAdmin = Boolean(
-    user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() &&
-    (!is2FAEnabled || is2FAVerified)
+    user && (!is2FAEnabled || is2FAVerified)
   );
 
   useEffect(() => {

@@ -23,6 +23,15 @@ export const otherGames: GameData[] = [
     image: "/assets/aistudio/icone_d2367d66.webp",
     playStoreUrl: "https://play.google.com/store/apps/details?id=com.aistudio.cobrapromax.game",
     iframeUrl: "/cobra-pro-max.html"
+  },
+  {
+    id: "cobra-racing-3d",
+    title: "Cobra Racing 3D",
+    stats: "Gráficos de Última Geração em 3D",
+    category: "Corrida",
+    isFeatured: true,
+    image: "/src/assets/images/cobra_racing_3d_banner_1794435318487.jpg",
+    iframeUrl: "/cobraracing3d/index.html"
   }
 ];
 

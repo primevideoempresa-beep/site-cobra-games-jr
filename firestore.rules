@@ -7,11 +7,11 @@ service cloud.firestore {
       return request.auth != null;
     }
     
-    // Admin check rigorously enforces email verification to prevent identity spoofing
+    // Admin check rigorously enforces identity verification via authorized_admins collection
     function isAdmin() {
       return isSignedIn() && 
         request.auth.token.email_verified == true &&
-        request.auth.token.email.lower() == 'primevideoempresa@gmail.com';
+        exists(/databases/$(database)/documents/authorized_admins/$(request.auth.token.email.lower()));
     }
     
     function isValidId(id) {
@@ -127,6 +127,12 @@ service cloud.firestore {
     // Admin Security & 2FA Configuration: Completely locked down to verified admin only
     match /admin_security/{docId} {
       allow read, write: if isAdmin() && isValidId(docId);
+    }
+
+    // Authorized Admins: Metadata for role validation
+    match /authorized_admins/{email} {
+      allow read: if isAdmin();
+      allow write: if false; 
     }
   }
 }

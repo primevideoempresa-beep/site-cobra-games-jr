@@ -59,32 +59,32 @@ async function runAudit() {
     const authContextContent = fs.readFileSync(path.join(process.cwd(), 'src/context/AuthContext.tsx'), 'utf-8');
     const adminLoginContent = fs.readFileSync(path.join(process.cwd(), 'src/pages/Admin/AdminLoginPage.tsx'), 'utf-8');
 
-    const enforcesOwnerEmail = authContextContent.includes("currentEmail === ADMIN_EMAIL.toLowerCase()") &&
-      authContextContent.includes("ADMIN_EMAIL = 'primevideoempresa@gmail.com'");
+    const enforcesAuthorizedAdmin = authContextContent.includes("adminDoc.exists()") &&
+      authContextContent.includes("getDoc(doc(db, 'authorized_admins', currentEmail))");
     const rejectsOtherAccounts = authContextContent.includes("await signOut(auth)") &&
       authContextContent.includes("setError('Acesso restrito");
     const hidesEmailBeforeLogin = !adminLoginContent.includes("primevideoempresa@gmail.com");
     const usesMaskEmail = adminLoginContent.includes("maskEmail");
 
-    if (enforcesOwnerEmail && rejectsOtherAccounts && hidesEmailBeforeLogin && usesMaskEmail) {
+    if (enforcesAuthorizedAdmin && rejectsOtherAccounts && hidesEmailBeforeLogin && usesMaskEmail) {
       record(
         1,
-        'Autenticação do Proprietário e Ocultação de PII',
+        'Autenticação de Administradores Autorizados e Ocultação de PII',
         'Autenticação & Painel Administrativo',
         'APROVADO',
-        'O sistema valida estritamente a conta autorizada, desloga automaticamente qualquer conta Google divergente com signOut e oculta o e-mail em telas pré-login.',
-        'Nenhuma. Exposição anterior de PII foi corrigida com mascaramento e mensagens neutras.',
-        'Aplicação de maskEmail() e ocultação completa de referências de e-mail na interface inicial de login.'
+        'O sistema valida a identidade através da coleção "authorized_admins" no Firestore, eliminando dependência de e-mails fixos no código. Desloga automaticamente contas não autorizadas e oculta PII.',
+        'Nenhuma. A autorização agora é dinâmica e gerenciável via banco de dados.',
+        'Migração de e-mail hardcoded para whitelist dinâmica em Firestore (authorized_admins).'
       );
     } else {
       record(
         1,
-        'Autenticação do Proprietário e Ocultação de PII',
+        'Autenticação de Administradores Autorizados e Ocultação de PII',
         'Autenticação & Painel Administrativo',
         'REPROVADO',
-        `Falha na validação: enforcesOwnerEmail=${enforcesOwnerEmail}, hidesEmailBeforeLogin=${hidesEmailBeforeLogin}`,
-        'E-mail ou credenciais administrativas expostas em código client-side.',
-        'Remover strings de e-mail estáticas da interface e aplicar maskEmail.'
+        `Falha na validação: enforcesAuthorizedAdmin=${enforcesAuthorizedAdmin}, hidesEmailBeforeLogin=${hidesEmailBeforeLogin}`,
+        'E-mail fixo em código ou falta de validação dinâmica.',
+        'Remover strings de e-mail estáticas e implementar check na coleção authorized_admins.'
       );
     }
   } catch (err: any) {

@@ -1,0 +1,8 @@
+{
+  "name": "cobra-racing-3d",
+  "title": "Cobra Racing 3D",
+  "description": "Corrida automobilística 3D profissional com carros neon e pistas de alta performance.",
+  "version": "1.0.0",
+  "category": "Corrida",
+  "main": "index.html"
+}

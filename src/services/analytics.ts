@@ -205,38 +205,70 @@ export class AnalyticsService {
     }
   }
 
-  // -------------------------------------------------------------------------
-  // DESK RACER RETENTION & USER BEHAVIOR TRACKING
-  // -------------------------------------------------------------------------
-
-  static async trackDeskRacerRaceStart(params: { camera?: string | number; inputMethod?: string } = {}) {
+  static async trackGameStart(gameId: string, params: Record<string, any> = {}) {
+    const cleanId = (gameId || 'game').replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 64);
     const retention = this.getRetentionCohort();
-    const newCareerCount = retention.careerPlays + 1;
-    safeStorage.setItem(DESK_RACER_PLAY_COUNT_KEY, String(newCareerCount), 'local');
-    safeStorage.setItem(DESK_RACER_LAST_PLAYED_KEY, String(Date.now()), 'local');
-
+    
     const eventData = {
-      gameId: 'desk_racer',
-      camera: String(params.camera || '1'),
-      inputMethod: params.inputMethod || 'keyboard',
+      gameId: cleanId,
       retentionCohort: retention.cohort,
       daysSinceFirstVisit: retention.daysSinceFirstVisit,
       isReturningPlayer: retention.isReturning,
-      careerRaceNumber: newCareerCount
+      ...params
     };
 
-    await this.trackEvent('desk_racer_race_start', eventData);
-    logFirebaseEvent('desk_racer_race_start', eventData);
+    await this.trackEvent('game_start', eventData);
+    logFirebaseEvent('game_start', eventData);
 
-    const gameStatsRef = doc(db, 'game_stats', 'desk_racer');
-    const updatePayload: Record<string, any> = {
-      racesStarted: increment(1),
-      lastUpdated: serverTimestamp()
+    try {
+      const gameStatsRef = doc(db, 'game_stats', cleanId);
+      const updatePayload: Record<string, any> = {
+        racesStarted: increment(1), // Keeping compatible naming but could be 'starts'
+        lastUpdated: serverTimestamp()
+      };
+      if (retention.cohort === 'D1_retained') updatePayload.retentionD1 = increment(1);
+      if (retention.cohort === 'D7_retained') updatePayload.retentionD7 = increment(1);
+
+      await setDoc(gameStatsRef, updatePayload, { merge: true });
+    } catch (e) {
+      // Falha não crítica
+    }
+  }
+
+  static async trackGameFinish(gameId: string, params: Record<string, any> = {}) {
+    const cleanId = (gameId || 'game').replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 64);
+    const eventData = {
+      gameId: cleanId,
+      ...params
     };
-    if (retention.cohort === 'D1_retained') updatePayload.retentionD1 = increment(1);
-    if (retention.cohort === 'D7_retained') updatePayload.retentionD7 = increment(1);
 
-    await setDoc(gameStatsRef, updatePayload, { merge: true });
+    await this.trackEvent('game_finish', eventData);
+    logFirebaseEvent('game_finish', eventData);
+
+    try {
+      const gameStatsRef = doc(db, 'game_stats', cleanId);
+      await setDoc(gameStatsRef, {
+        racesCompleted: increment(1),
+        lastUpdated: serverTimestamp(),
+        ...params.score && { totalScore: increment(params.score) }
+      }, { merge: true });
+    } catch (e) {
+      // Falha não crítica
+    }
+  }
+
+  static async trackGameFailure(gameId: string, error: string) {
+    const cleanId = (gameId || 'game').replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 64);
+    await this.trackEvent('game_failure', { gameId: cleanId, error });
+    logFirebaseEvent('game_failure', { gameId: cleanId, error });
+  }
+
+  // -------------------------------------------------------------------------
+  // DESK RACER SPECIFIC (Kept for compatibility, but internally uses generic)
+  // -------------------------------------------------------------------------
+
+  static async trackDeskRacerRaceStart(params: { camera?: string | number; inputMethod?: string } = {}) {
+    await this.trackGameStart('desk_racer', params);
   }
 
   static async trackDeskRacerLapComplete(params: { lapNumber: number; lapTime: number; bestLap?: number; isFinish?: boolean }) {
@@ -259,23 +291,11 @@ export class AnalyticsService {
   }
 
   static async trackDeskRacerRaceFinish(params: { totalTime: number; bestLap: number }) {
-    const retention = this.getRetentionCohort();
-    const eventData = {
-      gameId: 'desk_racer',
+    await this.trackGameFinish('desk_racer', {
       totalTime: Number(params.totalTime.toFixed(3)),
       bestLap: Number(params.bestLap.toFixed(3)),
-      retentionCohort: retention.cohort
-    };
-
-    await this.trackEvent('desk_racer_race_finish', eventData);
-    logFirebaseEvent('desk_racer_race_finish', eventData);
-
-    const gameStatsRef = doc(db, 'game_stats', 'desk_racer');
-    await setDoc(gameStatsRef, {
-      racesCompleted: increment(1),
-      totalPlaytimeSeconds: increment(Math.round(params.totalTime)),
-      lastUpdated: serverTimestamp()
-    }, { merge: true });
+      totalPlaytimeSeconds: Math.round(params.totalTime)
+    });
   }
 
   static async trackDeskRacerReplay() {
@@ -404,3 +424,4 @@ export class AnalyticsService {
     return 'Other';
   }
 }
+

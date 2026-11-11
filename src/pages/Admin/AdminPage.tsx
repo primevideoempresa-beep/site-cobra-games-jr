@@ -31,6 +31,7 @@ import { ptBR } from 'date-fns/locale';
 import { toast, Toaster } from 'sonner';
 import { LoggerService } from '../../services/logger';
 import { DeskRacerAnalytics } from './components/DeskRacerAnalytics';
+import { UniversalGameAnalytics } from './components/UniversalGameAnalytics';
 import { GameManager } from './components/GameManager';
 import { BannerManager } from './components/BannerManager';
 import { SeedUtility } from './components/SeedUtility';
@@ -38,7 +39,7 @@ import { SystemTest } from './components/SystemTest';
 import { SecuritySettings } from './components/SecuritySettings';
 import { SecuritySessionManager } from '../../lib/security';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
-import { ShieldAlert } from 'lucide-react';
+import { ShieldAlert, ArrowLeft } from 'lucide-react';
 
 // Lazy load heavy chart components
 const DashboardCharts = lazy(() => import('./components/DashboardCharts'));
@@ -114,6 +115,7 @@ export const AdminPage = () => {
   const { user, isAdmin, loading, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
+  const [selectedGameForStats, setSelectedGameForStats] = useState<any>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [stats, setStats] = useState({
     totalVisitors: 0,
@@ -488,8 +490,8 @@ export const AdminPage = () => {
                 <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
                   <h3 className="text-xl font-bold text-white mb-6 text-center lg:text-left">Popularidade Real</h3>
                   <div className="space-y-6">
-                    {sortedGameStats.length > 0 ? sortedGameStats.map((game, i) => (
-                      <div key={i} className="flex items-center justify-between">
+                    {sortedGameStats.length > 0 ? sortedGameStats.map((game) => (
+                      <div key={game.id} className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-zinc-800 rounded-xl flex items-center justify-center">
                             <Gamepad2 className="w-5 h-5 text-orange-500" />
@@ -518,66 +520,81 @@ export const AdminPage = () => {
 
           {activeTab === 'game_stats' && (
             <div className="space-y-10">
-              {/* Dedicated Desk Racer Deep-Dive with Firebase Analytics */}
-              <DeskRacerAnalytics stats={deskRacerStats} events={recentEvents} />
-
-              {/* General Games Catalog Ranking */}
-              <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h3 className="text-xl font-bold text-white">Catálogo de Jogos — Performance Geral</h3>
-                    <p className="text-xs text-zinc-500 mt-1">Comparativo de conversão (Cliques vs Aberturas)</p>
+              {selectedGameForStats ? (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <button 
+                      onClick={() => setSelectedGameForStats(null)}
+                      className="flex items-center gap-2 text-zinc-400 hover:text-white font-bold text-sm transition-colors"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>Voltar para Lista</span>
+                    </button>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white">
+                        <Gamepad2 className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-xl font-black text-white">{getGameName(selectedGameForStats.id)}</h3>
+                    </div>
                   </div>
-                  <span className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Tempo Real</span>
+                  
+                  {selectedGameForStats.id === 'desk_racer' ? (
+                    <DeskRacerAnalytics stats={selectedGameForStats} events={recentEvents} />
+                  ) : (
+                    <UniversalGameAnalytics 
+                      game={selectedGameForStats} 
+                      stats={selectedGameForStats} 
+                      events={recentEvents} 
+                    />
+                  )}
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="text-zinc-500 text-xs uppercase tracking-wider border-b border-zinc-800">
-                        <th className="px-6 py-4 font-bold">Jogo</th>
-                        <th className="px-6 py-4 font-bold">Cliques na Vitrine</th>
-                        <th className="px-6 py-4 font-bold">Aberturas Efetivas</th>
-                        <th className="px-6 py-4 font-bold">Taxa de Conversão</th>
-                        <th className="px-6 py-4 font-bold">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-800/50">
-                      {sortedGameStats.map((game) => {
-                        const conversion = (game.clicks || 0) > 0 ? (((game.opens || 0) / game.clicks) * 100).toFixed(1) : '0';
-                        return (
-                          <tr key={game.id} className="hover:bg-zinc-800/30 transition-colors">
+              ) : (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
+                  <div className="flex justify-between items-center mb-6">
+                    <div>
+                      <h3 className="text-xl font-bold text-white">Estatísticas por Jogo</h3>
+                      <p className="text-xs text-zinc-500 mt-1">Selecione um título para análise detalhada de retenção e performance</p>
+                    </div>
+                    <span className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Tempo Real</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="text-zinc-500 text-xs uppercase tracking-wider border-b border-zinc-800">
+                          <th className="px-6 py-4 font-bold">Jogo</th>
+                          <th className="px-6 py-4 font-bold">Cliques</th>
+                          <th className="px-6 py-4 font-bold">Iniciados</th>
+                          <th className="px-6 py-4 font-bold">Retenção D1</th>
+                          <th className="px-6 py-4 font-bold text-right">Ação</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-800/50">
+                        {sortedGameStats.map((game) => (
+                          <tr key={game.id} className="hover:bg-zinc-800/30 transition-colors group">
                             <td className="px-6 py-4 text-sm font-bold text-white flex items-center gap-3">
                               <div className="p-2 bg-zinc-800 rounded-xl text-orange-500">
                                 <Gamepad2 className="w-4 h-4" />
                               </div>
-                              {getGameName(game.id)}
+                              <span>{getGameName(game.id)}</span>
                             </td>
                             <td className="px-6 py-4 text-sm text-zinc-300 font-bold">{game.clicks || 0}</td>
                             <td className="px-6 py-4 text-sm text-cyan-400 font-bold">{game.opens || 0}</td>
-                            <td className="px-6 py-4 text-sm">
-                              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-zinc-800 text-zinc-300">
-                                {conversion}%
-                              </span>
-                            </td>
-                            <td className="px-6 py-4">
-                              {gamesCatalog.find(g => g.id === game.id || g.title?.toLowerCase().includes(game.id.replace(/_/g, ' ')))?.isUnderMaintenance ? (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-bold uppercase">
-                                  <Wrench className="w-2.5 h-2.5 animate-pulse" />
-                                  Manutenção
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] font-bold uppercase">
-                                  Ativo
-                                </span>
-                              )}
+                            <td className="px-6 py-4 text-sm text-emerald-400 font-bold">{game.retentionD1 || 0}</td>
+                            <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={() => setSelectedGameForStats(game)}
+                                className="bg-zinc-800 hover:bg-orange-500 text-zinc-400 hover:text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all"
+                              >
+                                Detalhes
+                              </button>
                             </td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 

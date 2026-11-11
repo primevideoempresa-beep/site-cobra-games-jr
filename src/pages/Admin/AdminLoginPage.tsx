@@ -273,7 +273,7 @@ export const AdminLoginPage = () => {
                 <>
                   <div className="text-center">
                     <p className="text-sm text-zinc-300 font-medium">
-                      Abra o aplicativo <strong className="text-white">Google Authenticator</strong> no seu celular e digite o código de 6 dígitos gerado para <span className="text-orange-400 font-semibold">Cobra Games Jr</span>:
+                      <span>Abra o aplicativo </span><strong className="text-white">Google Authenticator</strong><span> no seu celular e digite o código de 6 dígitos gerado para </span><span className="text-orange-400 font-semibold">Cobra Games Jr</span><span>:</span>
                     </p>
                   </div>
 
@@ -433,7 +433,7 @@ export const AdminLoginPage = () => {
                 ) : (
                   <>
                     <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-                    Entrar com Google
+                    <span>Entrar com Google</span>
                   </>
                 )}
               </button>
@@ -472,7 +472,7 @@ export const AdminLoginPage = () => {
           className="mt-8 flex items-center gap-2 text-zinc-500 hover:text-white transition-colors mx-auto font-bold text-sm cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          Voltar para o site principal
+          <span>Voltar para o site principal</span>
         </button>
       </div>
     </div>
