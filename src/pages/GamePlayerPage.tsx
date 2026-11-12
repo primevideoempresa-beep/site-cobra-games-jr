@@ -30,6 +30,13 @@ export const GamePlayerPage: React.FC = () => {
   const [isGameReady, setIsGameReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const loadTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+    };
+  }, []);
 
   // Heartbeat interval for session duration tracking
   useEffect(() => {
@@ -94,9 +101,16 @@ export const GamePlayerPage: React.FC = () => {
   }, [loading, isGameReady, loadError]);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchGame = async () => {
       if (!gameId) return;
       
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+        loadTimeoutRef.current = null;
+      }
+      setLoading(true);
+      setIsFullscreen(false);
       setLoadError(null);
       setLoadingProgress(0);
       setIsGameReady(false);
@@ -128,11 +142,16 @@ export const GamePlayerPage: React.FC = () => {
           navigate('/');
         }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     fetchGame();
+    return () => {
+      cancelled = true;
+    };
   }, [gameId, navigate]);
 
   if (loading) return (
@@ -153,6 +172,10 @@ export const GamePlayerPage: React.FC = () => {
   if (!game) return null;
 
   const handleRestart = () => {
+    if (loadTimeoutRef.current) {
+      clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = null;
+    }
     setIframeKey(prev => prev + 1);
     setIsGameReady(false);
     setLoadingProgress(0);
@@ -176,7 +199,7 @@ export const GamePlayerPage: React.FC = () => {
       {/* Platform Toolbar */}
       <header className="bg-slate-900/50 backdrop-blur-xl border-b border-white/5 px-4 py-3 flex items-center justify-between z-10 shrink-0">
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/')} className="p-2 hover:bg-white/5 rounded-full transition-colors text-slate-400 hover:text-white">
+          <button type="button" onClick={() => navigate('/')} aria-label="Voltar" className="p-2 hover:bg-white/5 rounded-full transition-colors text-slate-400 hover:text-white cursor-pointer">
             <ArrowLeft className="w-6 h-6" />
           </button>
           
@@ -199,15 +222,17 @@ export const GamePlayerPage: React.FC = () => {
         <div className="flex items-center gap-2">
           {!game.isUnderMaintenance && (
             <>
-              <button onClick={handleRestart} className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all" title="Reiniciar">
+              <button type="button" onClick={handleRestart} className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all cursor-pointer" title="Reiniciar" aria-label="Reiniciar jogo">
                 <RotateCcw className="w-5 h-5" />
               </button>
-              <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all hidden xs:flex" title="Tela Cheia">
-                {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+              <button type="button" onClick={() => setIsFullscreen(prev => !prev)} className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all hidden xs:flex cursor-pointer" title="Tela Cheia" aria-label={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}>
+                <span key={isFullscreen ? 'min' : 'max'} className="inline-flex items-center justify-center">
+                  {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+                </span>
               </button>
             </>
           )}
-          <button onClick={handleShare} className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+          <button type="button" onClick={handleShare} className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all cursor-pointer" aria-label="Compartilhar jogo">
             <Share2 className="w-5 h-5" />
           </button>
         </div>
@@ -225,8 +250,8 @@ export const GamePlayerPage: React.FC = () => {
               <p className="text-slate-400 text-sm leading-relaxed mb-8">
                 {game.maintenanceMessage || 'Estamos realizando melhorias técnicas. Voltaremos em breve!'}
               </p>
-              <button onClick={() => navigate('/')} className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-black text-sm transition-all active:scale-95 shadow-lg shadow-blue-600/20">
-                Explorar Coleção
+              <button type="button" onClick={() => navigate('/')} className="w-full bg-blue-600 hover:bg-blue-500 text-white py-4 rounded-2xl font-black text-sm transition-all active:scale-95 shadow-lg shadow-blue-600/20 cursor-pointer">
+                <span>Explorar Coleção</span>
               </button>
             </div>
           </div>
@@ -257,13 +282,13 @@ export const GamePlayerPage: React.FC = () => {
                 <div className="max-w-xs w-full text-center space-y-6">
                   <AlertTriangle className="w-12 h-12 text-red-500 mx-auto" />
                   <h3 className="text-lg font-bold">Falha no Carregamento</h3>
-                  <button onClick={handleRestart} className="w-full bg-white text-black py-4 rounded-2xl font-bold text-sm">Tentar Novamente</button>
+                  <button type="button" onClick={handleRestart} className="w-full bg-white text-black py-4 rounded-2xl font-bold text-sm cursor-pointer"><span>Tentar Novamente</span></button>
                 </div>
               </div>
             )}
 
             <iframe
-              key={iframeKey}
+              key={`${gameId || 'game'}-${iframeKey}`}
               ref={iframeRef}
               src={game.iframeUrl}
               title={game.title}
@@ -272,11 +297,12 @@ export const GamePlayerPage: React.FC = () => {
               sandbox="allow-scripts allow-forms allow-popups allow-pointer-lock"
               allowFullScreen
               onLoad={() => {
-                setTimeout(() => {
-                  if (!isGameReady && !loadError) {
+                if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);
+                loadTimeoutRef.current = setTimeout(() => {
+                  if (!loadError) {
                     setIsGameReady(true);
                     setLoadingProgress(100);
-                    AnalyticsService.trackGameStart(gameId!);
+                    if (gameId) AnalyticsService.trackGameStart(gameId);
                   }
                 }, 1500);
               }}
@@ -288,7 +314,7 @@ export const GamePlayerPage: React.FC = () => {
                 <Gamepad2 className="w-16 h-16 text-slate-800 mx-auto" />
                 <h2 className="text-2xl font-black">Aguardando Lançamento Web</h2>
                 <p className="text-slate-500 text-sm">Este título está otimizado para dispositivos móveis nativos no momento.</p>
-                <button onClick={() => navigate('/')} className="px-8 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-bold border border-white/5 transition-all">Ver outros jogos</button>
+                <button type="button" onClick={() => navigate('/')} className="px-8 py-3 bg-white/5 hover:bg-white/10 rounded-xl text-sm font-bold border border-white/5 transition-all cursor-pointer"><span>Ver outros jogos</span></button>
              </div>
           </div>
         )}

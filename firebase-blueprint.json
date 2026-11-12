@@ -135,7 +135,9 @@
       "type": "object",
       "properties": {
         "role": { "type": "string" },
+        "uid": { "type": "string" },
         "addedAt": { "type": "string", "format": "date-time" },
+        "lastLoginAt": { "type": "string", "format": "date-time" },
         "verified": { "type": "boolean" }
       },
       "required": ["role"]

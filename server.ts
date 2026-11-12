@@ -5,7 +5,7 @@ import fs from 'fs';
 import AdmZip from 'adm-zip';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
-import { initializeApp, getApps, App } from 'firebase-admin/app';
+import { initializeApp, getApps, App, cert } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -18,17 +18,28 @@ const firebaseConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'fire
 
 let firebaseApp: App;
 if (!getApps().length) {
-  firebaseApp = initializeApp({
-    projectId: firebaseConfig.projectId,
-    storageBucket: firebaseConfig.storageBucket
-  });
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (serviceAccountJson) {
+    firebaseApp = initializeApp({
+      credential: cert(JSON.parse(serviceAccountJson)),
+      projectId: firebaseConfig.projectId,
+      storageBucket: firebaseConfig.storageBucket
+    });
+  } else {
+    firebaseApp = initializeApp({
+      projectId: firebaseConfig.projectId,
+      storageBucket: firebaseConfig.storageBucket
+    });
+  }
 } else {
   firebaseApp = getApps()[0];
 }
 
 const bucket = getStorage(firebaseApp).bucket();
 const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
+const db = firebaseConfig.firestoreDatabaseId
+  ? getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(firebaseApp);
 
 // Auto-seed primary admin (Security Pillar: Identity Bootstrap)
 async function ensurePrimaryAdmin() {
@@ -45,8 +56,13 @@ async function ensurePrimaryAdmin() {
       });
       console.log('Primary admin authorized successfully.');
     }
-  } catch (err) {
-    console.error('Failed to bootstrap primary admin:', err);
+  } catch (err: any) {
+    const msg = String(err?.message || '');
+    if (err?.code === 7 || msg.includes('PERMISSION_DENIED')) {
+      console.warn('Admin SDK without Firestore IAM credentials in current runtime; client owner bootstrap remains enforced by Firestore Rules.');
+    } else {
+      console.error('Failed to bootstrap primary admin:', msg);
+    }
   }
 }
 
@@ -76,6 +92,17 @@ if (!fs.existsSync('/tmp/uploads/')) {
   fs.mkdirSync('/tmp/uploads/', { recursive: true });
 }
 
+async function verifyAdminViaUserTokenFirestoreRest(idToken: string, email: string): Promise<boolean> {
+  const databaseId = firebaseConfig.firestoreDatabaseId || '(default)';
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseConfig.projectId)}/databases/${encodeURIComponent(databaseId)}/documents/authorized_admins/${encodeURIComponent(email)}`;
+  const resp = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
+  });
+  return resp.ok;
+}
+
 // Middleware to verify Admin Token (Security Pillar 8)
 async function verifyAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers.authorization;
@@ -86,17 +113,31 @@ async function verifyAdmin(req: express.Request, res: express.Response, next: ex
   const idToken = authHeader.split('Bearer ')[1];
   try {
     const decodedToken = await auth.verifyIdToken(idToken);
-    const email = decodedToken.email?.toLowerCase();
+    const email = decodedToken.email?.trim().toLowerCase();
 
     if (!email || !decodedToken.email_verified) {
       return res.status(403).json({ error: 'Acesso negado. E-mail não verificado.' });
     }
 
     // Security Pillar: Verify admin identity via Firestore (Dynamic Authorization)
-    const adminDoc = await db.collection('authorized_admins').doc(email).get();
+    let isAuthorized = false;
+    try {
+      const adminDoc = await db.collection('authorized_admins').doc(email).get();
+      if (adminDoc.exists) {
+        const data = adminDoc.data() || {};
+        isAuthorized = data.verified !== false && (!data.uid || data.uid === decodedToken.uid);
+      }
+    } catch (dbErr: any) {
+      const msg = String(dbErr?.message || '');
+      if (dbErr?.code === 7 || msg.includes('PERMISSION_DENIED')) {
+        isAuthorized = await verifyAdminViaUserTokenFirestoreRest(idToken, email);
+      } else {
+        throw dbErr;
+      }
+    }
 
-    if (!adminDoc.exists) {
-      console.warn(`Unauthorized admin attempt: ${email}`);
+    if (!isAuthorized) {
+      console.warn('Unauthorized admin attempt blocked.');
       return res.status(403).json({ error: 'Acesso negado. Esta conta não possui privilégios administrativos.' });
     }
 

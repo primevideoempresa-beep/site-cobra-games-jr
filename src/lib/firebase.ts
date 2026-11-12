@@ -1,24 +1,50 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence, inMemoryPersistence } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+  inMemoryPersistence
+} from 'firebase/auth';
+import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { isSupported, getMessaging, getToken, onMessage } from 'firebase/messaging';
 
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with secured connection
+// Initialize Firestore with secured connection to named database
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-// Initialize Auth with persistence and fallback (sem logs revelando estrutura interna)
-export const auth = getAuth(app);
-try {
-  setPersistence(auth, browserLocalPersistence).catch(() => {
-    setPersistence(auth, inMemoryPersistence).catch(() => {});
+// Non-blocking connection validation at boot
+if (typeof window !== 'undefined') {
+  getDocFromServer(doc(db, 'test', 'connection')).catch((err) => {
+    if (err instanceof Error && err.message.includes('the client is offline')) {
+      console.error('[Firebase] Cliente offline: verifique a configuração do Firebase.');
+    }
   });
-} catch {
-  // Silent fallback
 }
+
+// Initialize Auth with deterministic persistence chain (local -> session -> memory)
+export const auth = getAuth(app);
+
+export const authPersistenceReady: Promise<void> = (async () => {
+  if (typeof window === 'undefined') return;
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch {
+    try {
+      await setPersistence(auth, browserSessionPersistence);
+    } catch {
+      try {
+        await setPersistence(auth, inMemoryPersistence);
+      } catch {
+        // Silent fallback
+      }
+    }
+  }
+})();
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({

@@ -7,13 +7,43 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    // Primary owner identity verification (server-enforced via verified Google Auth token)
+    function isPrimaryOwner() {
+      return isSignedIn() &&
+        request.auth.token.email_verified == true &&
+        'email' in request.auth.token &&
+        request.auth.token.email is string &&
+        request.auth.token.email.lower() == 'primevideoempresa@gmail.com';
+    }
+
+    function isAuthorizedAdminDoc(docData) {
+      return (!('verified' in docData) || docData.verified == true) &&
+        (!('uid' in docData) || docData.uid == request.auth.uid) &&
+        (!('role' in docData) || docData.role in ['owner', 'admin', 'super_admin']);
+    }
+
     // Admin check rigorously enforces identity verification via authorized_admins collection
     function isAdmin() {
-      return isSignedIn() && 
+      return isPrimaryOwner() || (
+        isSignedIn() &&
         request.auth.token.email_verified == true &&
-        exists(/databases/$(database)/documents/authorized_admins/$(request.auth.token.email.lower()));
+        'email' in request.auth.token &&
+        request.auth.token.email is string &&
+        exists(/databases/$(database)/documents/authorized_admins/$(request.auth.token.email.lower())) &&
+        isAuthorizedAdminDoc(get(/databases/$(database)/documents/authorized_admins/$(request.auth.token.email.lower())).data)
+      );
     }
-    
+
+    function isValidAuthorizedAdmin(data) {
+      return data.keys().hasAll(['role', 'verified']) &&
+        data.keys().hasOnly(['role', 'verified', 'uid', 'addedAt', 'lastLoginAt']) &&
+        data.role == 'owner' &&
+        data.verified == true &&
+        (!('uid' in data) || (data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 && data.uid == request.auth.uid)) &&
+        (!('addedAt' in data) || data.addedAt is timestamp) &&
+        (!('lastLoginAt' in data) || data.lastLoginAt is timestamp);
+    }
+
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -129,10 +159,21 @@ service cloud.firestore {
       allow read, write: if isAdmin() && isValidId(docId);
     }
 
-    // Authorized Admins: Metadata for role validation
+    // Authorized Admins: Metadata for role validation (strictly non-public, owner-bootstrapped only)
     match /authorized_admins/{email} {
-      allow read: if isAdmin();
-      allow write: if false; 
+      allow get: if isAdmin() && email == request.auth.token.email.lower();
+      allow list: if false;
+      allow create: if isPrimaryOwner() &&
+        email == 'primevideoempresa@gmail.com' &&
+        isValidAuthorizedAdmin(request.resource.data) &&
+        (!('addedAt' in request.resource.data) || request.resource.data.addedAt == request.time) &&
+        (!('lastLoginAt' in request.resource.data) || request.resource.data.lastLoginAt == request.time);
+      allow update: if isPrimaryOwner() &&
+        email == 'primevideoempresa@gmail.com' &&
+        isValidAuthorizedAdmin(request.resource.data) &&
+        (!('addedAt' in resource.data) || request.resource.data.addedAt == resource.data.addedAt) &&
+        (!('lastLoginAt' in request.resource.data) || request.resource.data.lastLoginAt == request.time);
+      allow delete: if false;
     }
   }
 }

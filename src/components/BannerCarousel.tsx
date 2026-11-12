@@ -89,7 +89,14 @@ export const BannerCarousel: React.FC<BannerCarouselProps> = ({ onNavigateToCate
   const [hasDraggedEnough, setHasDraggedEnough] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const autoplayTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const autoplayTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const dragResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (dragResetTimerRef.current) clearTimeout(dragResetTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -121,6 +128,13 @@ export const BannerCarousel: React.FC<BannerCarouselProps> = ({ onNavigateToCate
   }, []);
 
   const totalBanners = banners.length;
+
+  // Keep currentIndex within bounds when Firestore updates banner list
+  useEffect(() => {
+    if (totalBanners > 0 && currentIndex >= totalBanners) {
+      setCurrentIndex(0);
+    }
+  }, [totalBanners, currentIndex]);
 
   const nextSlide = useCallback(() => {
     if (totalBanners === 0) return;
@@ -188,7 +202,8 @@ export const BannerCarousel: React.FC<BannerCarouselProps> = ({ onNavigateToCate
     setIsDragging(false);
     setDragStartX(0);
     setDragCurrentX(0);
-    setTimeout(() => {
+    if (dragResetTimerRef.current) clearTimeout(dragResetTimerRef.current);
+    dragResetTimerRef.current = setTimeout(() => {
       setHasDraggedEnough(false);
       setIsPaused(false);
     }, 250);
@@ -228,7 +243,8 @@ export const BannerCarousel: React.FC<BannerCarouselProps> = ({ onNavigateToCate
     setIsDragging(false);
     setDragStartX(0);
     setDragCurrentX(0);
-    setTimeout(() => {
+    if (dragResetTimerRef.current) clearTimeout(dragResetTimerRef.current);
+    dragResetTimerRef.current = setTimeout(() => {
       setHasDraggedEnough(false);
       setIsPaused(false);
     }, 250);
@@ -318,7 +334,7 @@ export const BannerCarousel: React.FC<BannerCarouselProps> = ({ onNavigateToCate
           >
             {banners.map((banner, index) => (
               <div
-                key={banner.id}
+                key={banner.id || `banner-slide-${index}`}
                 className="w-full flex-shrink-0 relative group/slide"
                 aria-hidden={index !== currentIndex}
                 onClick={(e) => handleBannerClick(banner, e)}
@@ -396,7 +412,7 @@ export const BannerCarousel: React.FC<BannerCarouselProps> = ({ onNavigateToCate
                   const isActive = index === currentIndex;
                   return (
                     <button
-                      key={banner.id}
+                      key={banner.id || `banner-dot-${index}`}
                       type="button"
                       aria-label={`Ir para banner ${index + 1}: ${banner.title}`}
                       onClick={(e) => {
@@ -409,13 +425,11 @@ export const BannerCarousel: React.FC<BannerCarouselProps> = ({ onNavigateToCate
                           : 'w-2 bg-slate-600 hover:bg-slate-400'
                       }`}
                     >
-                      {/* Animated Progress inside active pill */}
-                      {isActive && !isPaused && (
-                        <span 
-                          key={currentIndex}
-                          className="absolute inset-0 bg-white/40 origin-left animate-[progress_5s_linear]" 
-                        />
-                      )}
+                      <span
+                        className={`absolute inset-0 bg-white/40 origin-left transition-opacity duration-300 ${
+                          isActive && !isPaused ? 'opacity-100 animate-[progress_5s_linear]' : 'opacity-0'
+                        }`}
+                      />
                     </button>
                   );
                 })}

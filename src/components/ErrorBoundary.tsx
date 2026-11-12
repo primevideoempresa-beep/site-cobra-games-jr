@@ -90,18 +90,20 @@ export class ErrorBoundary extends Component<Props, State> {
 
             <div className="flex flex-col sm:flex-row gap-4">
               <button
+                type="button"
                 onClick={this.handleReset}
                 className="flex-1 bg-white hover:bg-zinc-200 text-black font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
               >
                 <RefreshCcw className="w-5 h-5" />
-                Recarregar Aplicação
+                <span>Recarregar Aplicação</span>
               </button>
               <button
+                type="button"
                 onClick={() => window.location.href = '/'}
                 className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
               >
                 <Home className="w-5 h-5" />
-                Página Inicial
+                <span>Página Inicial</span>
               </button>
             </div>
 

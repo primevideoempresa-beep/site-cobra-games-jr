@@ -135,21 +135,30 @@ export async function getTwoFactorConfig(): Promise<TwoFactorConfig | null> {
       // Armazena no cache apenas o status booleano para agilidade visual, SEM dados confidenciais
       try {
         localStorage.setItem('cobra_2fa_status_only', JSON.stringify({ enabled: !!data.enabled }));
-      } catch (e) {}
+      } catch {}
       return data;
     }
-  } catch (err) {
-    console.warn('[2FA] Falha ao recuperar configuração de 2FA do Firestore:', err);
+
+    // Documento 2FA não existe no servidor: limpar cache legado/obsoleto
+    try {
+      localStorage.removeItem('cobra_2fa_status_only');
+    } catch {}
+    return null;
+  } catch (err: any) {
+    console.warn('[2FA] Falha ao recuperar configuração de 2FA do Firestore:', err?.code || 'unknown');
+    if (err?.code === 'permission-denied') {
+      return null;
+    }
   }
 
-  // Fallback seguro apenas para saber se está ativo, sem chaves secretas
+  // Fallback seguro apenas em falhas transitórias de rede, sem chaves secretas
   try {
     const cached = localStorage.getItem('cobra_2fa_status_only');
     if (cached) {
       const parsed = JSON.parse(cached);
       return { enabled: !!parsed.enabled, secret: '', backupCodes: [], usedBackupCodes: [] };
     }
-  } catch (e) {}
+  } catch {}
 
   return null;
 }

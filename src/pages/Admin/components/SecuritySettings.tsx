@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ShieldCheck, 
   ShieldAlert, 
@@ -71,6 +71,20 @@ export const SecuritySettings: React.FC = () => {
   const [isRegeneratingCodes, setIsRegeneratingCodes] = useState(false);
   const [justRegenerated, setJustRegenerated] = useState(false);
 
+  const copyKeyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyCodesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const testTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const regenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyKeyTimerRef.current) clearTimeout(copyKeyTimerRef.current);
+      if (copyCodesTimerRef.current) clearTimeout(copyCodesTimerRef.current);
+      if (testTimerRef.current) clearTimeout(testTimerRef.current);
+      if (regenTimerRef.current) clearTimeout(regenTimerRef.current);
+    };
+  }, []);
+
   const fetchConfig = async () => {
     setIsLoading(true);
     try {
@@ -110,14 +124,16 @@ export const SecuritySettings: React.FC = () => {
     navigator.clipboard.writeText(setupData.secret);
     setCopiedKey(true);
     toast.success('Chave secreta copiada para a área de transferência!');
-    setTimeout(() => setCopiedKey(false), 2500);
+    if (copyKeyTimerRef.current) clearTimeout(copyKeyTimerRef.current);
+    copyKeyTimerRef.current = setTimeout(() => setCopiedKey(false), 2500);
   };
 
   const handleCopyBackupCodes = (codes: string[]) => {
     navigator.clipboard.writeText(codes.join('\n'));
     setCopiedCodes(true);
     toast.success('Códigos de recuperação copiados!');
-    setTimeout(() => setCopiedCodes(false), 2500);
+    if (copyCodesTimerRef.current) clearTimeout(copyCodesTimerRef.current);
+    copyCodesTimerRef.current = setTimeout(() => setCopiedCodes(false), 2500);
   };
 
   const handleDownloadBackupCodes = (codes: string[]) => {
@@ -184,7 +200,8 @@ export const SecuritySettings: React.FC = () => {
     }
 
     setIsTesting(true);
-    setTimeout(() => {
+    if (testTimerRef.current) clearTimeout(testTimerRef.current);
+    testTimerRef.current = setTimeout(() => {
       const isValid = verifyTwoFactorToken(config.secret, clean);
       if (isValid) {
         setTestResult({
@@ -247,7 +264,8 @@ export const SecuritySettings: React.FC = () => {
         backupCodes: newCodes,
       }));
       setJustRegenerated(true);
-      setTimeout(() => setJustRegenerated(false), 2500);
+      if (regenTimerRef.current) clearTimeout(regenTimerRef.current);
+      regenTimerRef.current = setTimeout(() => setJustRegenerated(false), 2500);
       toast.success('8 novos códigos de recuperação gerados com sucesso!');
       await fetchConfig();
     } catch (err: any) {
@@ -313,27 +331,29 @@ export const SecuritySettings: React.FC = () => {
           <div className="shrink-0 flex items-center">
             {isEnabled ? (
               <button
+                type="button"
                 onClick={() => setIsDeactivateOpen(true)}
                 className="w-full sm:w-auto px-5 py-3 bg-zinc-800 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 text-zinc-300 border border-zinc-700 rounded-2xl text-xs font-bold transition-all"
               >
-                Desativar 2FA
+                <span>Desativar 2FA</span>
               </button>
             ) : (
               <button
+                type="button"
                 onClick={handleStartSetup}
                 disabled={isGeneratingSetup}
                 className="w-full sm:w-auto px-6 py-3.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-black rounded-2xl text-sm transition-all shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2"
               >
                 {isGeneratingSetup ? (
-                  <>
+                  <span key="generating" className="inline-flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Preparando...
-                  </>
+                    <span>Preparando...</span>
+                  </span>
                 ) : (
-                  <>
+                  <span key="idle" className="inline-flex items-center gap-2">
                     <Smartphone className="w-4 h-4" />
-                    Configurar Google Authenticator
-                  </>
+                    <span>Configurar Google Authenticator</span>
+                  </span>
                 )}
               </button>
             )}
@@ -359,10 +379,11 @@ export const SecuritySettings: React.FC = () => {
                   {config?.backupCodes?.length || 0} disponíveis
                 </p>
                 <button
+                  type="button"
                   onClick={() => setShowBackupCodes(!showBackupCodes)}
                   className="text-xs text-orange-400 hover:text-orange-300 font-bold underline"
                 >
-                  {showBackupCodes ? 'Ocultar' : 'Visualizar'}
+                  <span>{showBackupCodes ? 'Ocultar' : 'Visualizar'}</span>
                 </button>
               </div>
               <span className="text-xs text-zinc-400 mt-0.5 block">Para recuperação de emergência</span>
@@ -377,7 +398,9 @@ export const SecuritySettings: React.FC = () => {
                   className="text-zinc-500 hover:text-zinc-300 p-0.5 transition-colors"
                   title={revealEmail ? "Ocultar e-mail" : "Revelar e-mail"}
                 >
-                  {revealEmail ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  <span key={revealEmail ? 'hide-email' : 'show-email'} className="inline-flex">
+                    {revealEmail ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </span>
                 </button>
               </div>
               <p className="text-white text-sm font-mono truncate mt-1">
@@ -410,44 +433,49 @@ export const SecuritySettings: React.FC = () => {
                   className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
                   title={revealBackupCodes ? "Ocultar códigos" : "Revelar códigos"}
                 >
-                  {revealBackupCodes ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  {revealBackupCodes ? 'Camuflar' : 'Revelar'}
+                  <span key={revealBackupCodes ? 'hide-codes' : 'show-codes'} className="inline-flex items-center gap-1.5">
+                    {revealBackupCodes ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    <span>{revealBackupCodes ? 'Camuflar' : 'Revelar'}</span>
+                  </span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => handleCopyBackupCodes(config?.backupCodes || [])}
                   className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
                 >
                   <Copy className="w-3.5 h-3.5" />
-                  Copiar
+                  <span>Copiar</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => handleDownloadBackupCodes(config?.backupCodes || [])}
                   className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Baixar
+                  <span>Baixar</span>
                 </button>
                 <button
+                  type="button"
                   onClick={handleRegenerateCodes}
                   disabled={isRegeneratingCodes}
                   className="px-3 py-1.5 bg-orange-500/15 hover:bg-orange-500/25 active:scale-95 text-orange-400 border border-orange-500/30 hover:border-orange-500/50 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                   title="Gerar novos códigos e invalidar os anteriores"
                 >
                   {isRegeneratingCodes ? (
-                    <>
+                    <span key="regen-loading" className="inline-flex items-center gap-1.5">
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-400" />
                       <span>Gerando...</span>
-                    </>
+                    </span>
                   ) : justRegenerated ? (
-                    <>
+                    <span key="regen-done" className="inline-flex items-center gap-1.5">
                       <Check className="w-3.5 h-3.5 text-emerald-400" />
                       <span className="text-emerald-400">Gerados!</span>
-                    </>
+                    </span>
                   ) : (
-                    <>
+                    <span key="regen-idle" className="inline-flex items-center gap-1.5">
                       <RefreshCw className="w-3.5 h-3.5 text-orange-400" />
                       <span>Gerar Novos</span>
-                    </>
+                    </span>
                   )}
                 </button>
               </div>
@@ -500,11 +528,18 @@ export const SecuritySettings: React.FC = () => {
                 className="bg-zinc-950 border border-zinc-700 text-white text-center font-mono font-bold text-lg tracking-widest rounded-xl px-4 py-2.5 focus:outline-none focus:border-orange-500 w-full sm:w-44"
               />
               <button
+                type="button"
                 onClick={handleTestToken}
                 disabled={isTesting || testCode.length !== 6}
                 className="bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all flex items-center justify-center gap-2"
               >
-                {isTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Verificar Código'}
+                {isTesting ? (
+                  <span key="test-loading" className="inline-flex">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  </span>
+                ) : (
+                  <span key="test-idle">Verificar Código</span>
+                )}
               </button>
             </div>
 
@@ -524,11 +559,13 @@ export const SecuritySettings: React.FC = () => {
 
       {/* SETUP WIZARD MODAL */}
       {isSetupOpen && setupData && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+        <div data-modal-overlay="true" className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-xl w-full p-6 sm:p-8 relative shadow-2xl my-8">
             <button
+              type="button"
               onClick={() => setIsSetupOpen(false)}
               className="absolute top-6 right-6 p-2 text-zinc-400 hover:text-white rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
+              aria-label="Fechar configuração"
             >
               <X className="w-5 h-5" />
             </button>
@@ -582,7 +619,9 @@ export const SecuritySettings: React.FC = () => {
                           className="p-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors shrink-0"
                           title={revealSecret ? "Ocultar chave" : "Revelar chave"}
                         >
-                          {revealSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          <span key={revealSecret ? 'hide-secret' : 'show-secret'} className="inline-flex">
+                            {revealSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </span>
                         </button>
                         <button
                           type="button"
@@ -590,7 +629,9 @@ export const SecuritySettings: React.FC = () => {
                           className="p-1.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg transition-colors shrink-0"
                           title="Copiar Chave Secreta"
                         >
-                          {copiedKey ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span key={copiedKey ? 'copied-key' : 'copy-key'} className="inline-flex">
+                            {copiedKey ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </span>
                         </button>
                       </div>
                     </div>
@@ -607,18 +648,22 @@ export const SecuritySettings: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
+                      type="button"
                       onClick={() => handleCopyBackupCodes(setupData.backupCodes)}
                       className="px-2.5 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1"
                     >
-                      {copiedCodes ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                      {copiedCodes ? 'Copiados' : 'Copiar'}
+                      <span key={copiedCodes ? 'copied-codes' : 'copy-codes'} className="inline-flex items-center gap-1">
+                        {copiedCodes ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                        <span>{copiedCodes ? 'Copiados' : 'Copiar'}</span>
+                      </span>
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleDownloadBackupCodes(setupData.backupCodes)}
                       className="px-2.5 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-[11px] font-bold transition-all flex items-center gap-1"
                     >
                       <Download className="w-3 h-3" />
-                      Baixar (.txt)
+                      <span>Baixar (.txt)</span>
                     </button>
                   </div>
                 </div>
@@ -656,20 +701,21 @@ export const SecuritySettings: React.FC = () => {
                     className="bg-zinc-950 border border-zinc-700 text-white text-center font-mono font-black text-xl tracking-widest rounded-xl px-4 py-3 focus:outline-none focus:border-orange-500 flex-1"
                   />
                   <button
+                    type="button"
                     onClick={handleConfirmActivation}
                     disabled={isActivating || verificationCode.length !== 6}
                     className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-black px-6 py-3 rounded-xl text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20 active:scale-95"
                   >
                     {isActivating ? (
-                      <>
+                      <span key="activating" className="inline-flex items-center gap-2">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Validando...
-                      </>
+                        <span>Validando...</span>
+                      </span>
                     ) : (
-                      <>
+                      <span key="activate-idle" className="inline-flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4" />
-                        Ativar Proteção 2FA
-                      </>
+                        <span>Ativar Proteção 2FA</span>
+                      </span>
                     )}
                   </button>
                 </div>
@@ -681,11 +727,13 @@ export const SecuritySettings: React.FC = () => {
 
       {/* DEACTIVATE CONFIRMATION MODAL */}
       {isDeactivateOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div data-modal-overlay="true" className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-md w-full p-6 sm:p-8 relative shadow-2xl">
             <button
+              type="button"
               onClick={() => setIsDeactivateOpen(false)}
               className="absolute top-6 right-6 p-2 text-zinc-400 hover:text-white rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
+              aria-label="Fechar"
             >
               <X className="w-5 h-5" />
             </button>
@@ -711,8 +759,10 @@ export const SecuritySettings: React.FC = () => {
                     onClick={() => setMaskDeactivateCode(!maskDeactivateCode)}
                     className="text-[11px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1"
                   >
-                    {maskDeactivateCode ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                    {maskDeactivateCode ? 'Mostrar' : 'Ocultar'}
+                    <span key={maskDeactivateCode ? 'mask-on' : 'mask-off'} className="inline-flex items-center gap-1">
+                      {maskDeactivateCode ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                      <span>{maskDeactivateCode ? 'Mostrar' : 'Ocultar'}</span>
+                    </span>
                   </button>
                 </div>
                 <input
@@ -731,7 +781,7 @@ export const SecuritySettings: React.FC = () => {
                   onClick={() => setIsDeactivateOpen(false)}
                   className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl text-xs transition-all"
                 >
-                  Cancelar
+                  <span>Cancelar</span>
                 </button>
                 <button
                   type="button"
@@ -739,7 +789,13 @@ export const SecuritySettings: React.FC = () => {
                   disabled={isDeactivating || deactivateCode.length !== 6}
                   className="flex-1 py-3 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-black rounded-xl text-xs transition-all flex items-center justify-center gap-2"
                 >
-                  {isDeactivating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar e Desativar'}
+                  {isDeactivating ? (
+                    <span key="deactivating" className="inline-flex">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    </span>
+                  ) : (
+                    <span key="deactivate-idle">Confirmar e Desativar</span>
+                  )}
                 </button>
               </div>
             </div>

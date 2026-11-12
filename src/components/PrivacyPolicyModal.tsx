@@ -12,23 +12,32 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({
   onClose,
   onOpenCookiePolicy,
 }) => {
-  // Prevent body scrolling when modal is open
+  // Prevent body scrolling when modal is open without racing with other modals
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
+    if (!isOpen) return;
+    document.body.style.overflow = 'hidden';
+
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
     };
-  }, [isOpen]);
+    window.addEventListener('keydown', handleEsc);
+
+    return () => {
+      window.removeEventListener('keydown', handleEsc);
+      requestAnimationFrame(() => {
+        if (!document.querySelector('[data-modal-overlay="true"]')) {
+          document.body.style.overflow = '';
+        }
+      });
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   return (
     <div
       id="privacy-policy-modal-overlay"
+      data-modal-overlay="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-2 sm:p-6 overflow-y-auto animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -275,7 +284,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({
                 }}
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-colors cursor-pointer flex-shrink-0"
               >
-                Ver Política de Cookies
+                <span>Ver Política de Cookies</span>
               </button>
             )}
           </section>
@@ -328,7 +337,7 @@ export const PrivacyPolicyModal: React.FC<PrivacyPolicyModalProps> = ({
               onClick={onClose}
               className="flex-1 sm:flex-initial px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm transition-colors cursor-pointer shadow-md shadow-blue-600/20"
             >
-              Fechar Política
+              <span>Fechar Política</span>
             </button>
           </div>
         </div>

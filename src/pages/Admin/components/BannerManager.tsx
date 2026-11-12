@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Edit2, 
@@ -83,6 +83,13 @@ export const BannerManager = () => {
   }, []);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    };
+  }, []);
 
   const handleOpenModal = (banner?: Banner) => {
     if (banner) {
@@ -191,11 +198,12 @@ export const BannerManager = () => {
       <div className="flex justify-between items-center">
         <h3 className="text-xl font-bold text-white">Carrossel de Banners</h3>
         <button 
+          type="button"
           onClick={() => handleOpenModal()}
           className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-2xl font-black flex items-center gap-2 transition-all active:scale-95"
         >
           <Plus className="w-5 h-5" />
-          Novo Banner
+          <span>Novo Banner</span>
         </button>
       </div>
 
@@ -249,18 +257,23 @@ export const BannerManager = () => {
                 </div>
                 <div className="flex gap-2">
                   <button 
+                    type="button"
                     onClick={() => handleOpenModal(banner)}
                     className="p-2.5 bg-zinc-800 hover:bg-blue-500/20 text-zinc-400 hover:text-blue-400 rounded-xl transition-all"
+                    aria-label={`Editar ${banner.title}`}
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button 
+                    type="button"
                     onClick={() => {
                       if (deletingId === banner.id) {
+                        if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
                         handleDelete(banner.id);
                       } else {
                         setDeletingId(banner.id);
-                        setTimeout(() => setDeletingId(null), 3000); // Reset after 3 seconds
+                        if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+                        deleteTimerRef.current = setTimeout(() => setDeletingId(null), 3000);
                       }
                     }}
                     className={cn(
@@ -271,8 +284,10 @@ export const BannerManager = () => {
                     )}
                     title={deletingId === banner.id ? "Confirmar Exclusão" : "Excluir"}
                   >
-                    <Trash2 className="w-4 h-4" />
-                    {deletingId === banner.id && <span className="text-[10px] font-black uppercase">Confirmar?</span>}
+                    <Trash2 className="w-4 h-4 shrink-0" />
+                    <span className={deletingId === banner.id ? "text-[10px] font-black uppercase" : "sr-only"}>
+                      {deletingId === banner.id ? 'Confirmar?' : 'Excluir'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -448,7 +463,7 @@ export const BannerManager = () => {
                     className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs transition-all ${formData.active ? 'bg-emerald-500 text-white' : 'bg-zinc-800 text-zinc-500'}`}
                   >
                     <Eye className="w-4 h-4" />
-                    {formData.active ? 'Ativo' : 'Inativo'}
+                    <span>{formData.active ? 'Ativo' : 'Inativo'}</span>
                   </button>
                 </div>
               </div>
@@ -459,15 +474,17 @@ export const BannerManager = () => {
                   disabled={isSaving}
                   className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 active:scale-95"
                 >
-                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                  {editingBanner ? 'Atualizar Banner' : 'Criar Banner'}
+                  <span key={isSaving ? 'saving-icon' : 'save-icon'} className="inline-flex items-center">
+                    {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  </span>
+                  <span>{editingBanner ? 'Atualizar Banner' : 'Criar Banner'}</span>
                 </button>
                 <button 
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   className="px-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black transition-all active:scale-95"
                 >
-                  Cancelar
+                  <span>Cancelar</span>
                 </button>
               </div>
             </form>

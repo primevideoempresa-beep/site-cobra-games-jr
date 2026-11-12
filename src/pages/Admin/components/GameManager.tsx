@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import JSZip from 'jszip';
 import { 
   Plus, 
@@ -98,6 +98,13 @@ export const GameManager = () => {
   }, []);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    };
+  }, []);
 
   const handleOpenModal = (game?: Game) => {
     setZipFile(null);
@@ -333,11 +340,12 @@ export const GameManager = () => {
           />
         </div>
         <button 
+          type="button"
           onClick={() => handleOpenModal()}
           className="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-2xl font-black flex items-center justify-center gap-2 transition-all shadow-lg shadow-orange-500/20 active:scale-95"
         >
           <Plus className="w-5 h-5" />
-          Novo Jogo
+          <span>Novo Jogo</span>
         </button>
       </div>
 
@@ -408,27 +416,35 @@ export const GameManager = () => {
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-end gap-2">
                       <button 
+                        type="button"
                         onClick={() => handleOpenModal(game)}
                         className="p-2 text-zinc-400 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all"
+                        aria-label={`Editar ${game.title}`}
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button 
+                        type="button"
                         onClick={() => {
                           if (deletingId === game.id) {
+                            if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
                             handleDelete(game.id);
                           } else {
                             setDeletingId(game.id);
-                            setTimeout(() => setDeletingId(null), 3000);
+                            if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+                            deleteTimerRef.current = setTimeout(() => setDeletingId(null), 3000);
                           }
                         }}
                         className={cn(
                           "p-2 rounded-lg transition-all flex items-center gap-1",
                           deletingId === game.id ? "bg-red-600 text-white px-3" : "text-zinc-400 hover:text-red-500 hover:bg-red-500/10"
                         )}
+                        aria-label={deletingId === game.id ? `Confirmar exclusão de ${game.title}` : `Excluir ${game.title}`}
                       >
-                        <Trash2 className="w-4 h-4" />
-                        {deletingId === game.id && <span className="text-[10px] font-black uppercase">Confirmar?</span>}
+                        <Trash2 className="w-4 h-4 shrink-0" />
+                        <span className={deletingId === game.id ? "text-[10px] font-black uppercase" : "sr-only"}>
+                          {deletingId === game.id ? 'Confirmar?' : 'Excluir'}
+                        </span>
                       </button>
                     </div>
                   </td>
@@ -605,7 +621,7 @@ export const GameManager = () => {
                       </div>
                     </div>
                     <button type="button" onClick={() => setFormData({ ...formData, isUnderMaintenance: !formData.isUnderMaintenance })} className={cn("px-4 py-2 rounded-xl font-bold text-xs transition-all", formData.isUnderMaintenance ? "bg-amber-500 text-black" : "bg-zinc-800 text-zinc-400")}>
-                      {formData.isUnderMaintenance ? 'Ligado' : 'Desligado'}
+                      <span>{formData.isUnderMaintenance ? 'Ligado' : 'Desligado'}</span>
                     </button>
                   </div>
                   {formData.isUnderMaintenance && (
@@ -616,10 +632,14 @@ export const GameManager = () => {
 
               <div className="flex gap-4 pt-4">
                 <button type="submit" disabled={isSaving} className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2">
-                  {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                  {editingGame ? 'Salvar Alterações' : 'Publicar Jogo'}
+                  <span key={isSaving ? 'saving-icon' : 'save-icon'} className="inline-flex items-center">
+                    {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  </span>
+                  <span>{editingGame ? 'Salvar Alterações' : 'Publicar Jogo'}</span>
                 </button>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black transition-all">Cancelar</button>
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black transition-all">
+                  <span>Cancelar</span>
+                </button>
               </div>
             </form>
           </div>

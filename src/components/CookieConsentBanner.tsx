@@ -99,7 +99,7 @@ export const CookieConsentBanner: React.FC<CookieConsentBannerProps> = ({
                     onClick={onOpenPolicy}
                     className="text-blue-400 hover:text-blue-300 underline font-medium cursor-pointer py-1"
                   >
-                    Ler a Política de Cookies completa
+                    <span>Ler a Política de Cookies completa</span>
                   </button>
                   <span className="text-slate-600 hidden xs:inline">•</span>
                   <button
@@ -119,7 +119,7 @@ export const CookieConsentBanner: React.FC<CookieConsentBannerProps> = ({
                 onClick={handleRejectNonEssential}
                 className="flex-1 sm:flex-initial px-3 sm:px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs sm:text-sm font-semibold transition-colors cursor-pointer min-h-[42px]"
               >
-                Apenas Essenciais
+                <span>Apenas Essenciais</span>
               </button>
               <button
                 type="button"
@@ -144,6 +144,7 @@ export const CookieConsentBanner: React.FC<CookieConsentBannerProps> = ({
       {isPreferencesOpen && (
         <div
           id="cookie-preferences-overlay"
+          data-modal-overlay="true"
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-2 sm:p-6 animate-in fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsPreferencesOpen(false);
@@ -254,7 +255,7 @@ export const CookieConsentBanner: React.FC<CookieConsentBannerProps> = ({
                 onClick={handleRejectNonEssential}
                 className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-100 font-medium text-xs sm:text-sm transition-colors cursor-pointer"
               >
-                Rejeitar Não Essenciais
+                <span>Rejeitar Não Essenciais</span>
               </button>
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button
@@ -262,14 +263,14 @@ export const CookieConsentBanner: React.FC<CookieConsentBannerProps> = ({
                   onClick={handleSaveCustom}
                   className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl border border-blue-600 text-blue-600 hover:bg-blue-50 font-bold text-xs sm:text-sm transition-colors cursor-pointer"
                 >
-                  Salvar Preferências
+                  <span>Salvar Preferências</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleAcceptAll}
                   className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm transition-colors cursor-pointer shadow-md shadow-blue-600/20"
                 >
-                  Aceitar Todos
+                  <span>Aceitar Todos</span>
                 </button>
               </div>
             </div>

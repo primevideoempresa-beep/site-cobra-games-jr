@@ -3,9 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Menu, X, Download, MapPin, Mail, Gamepad2, Apple, PlaySquare, Play, ShieldCheck, Wrench, AlertTriangle } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { Routes, Route, useNavigate, useLocation, Link, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { AnalyticsService } from './services/analytics';
@@ -118,11 +117,14 @@ const Navbar = () => {
 
         {/* Mobile Toggle */}
         <button 
+          type="button"
           aria-label={isOpen ? "Fechar menu" : "Abrir menu"}
-          className="md:hidden p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-white rounded-xl hover:bg-blue-800 transition-colors"
-          onClick={() => setIsOpen(!isOpen)}
+          className="md:hidden p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-white rounded-xl hover:bg-blue-800 transition-colors cursor-pointer"
+          onClick={() => setIsOpen(prev => !prev)}
         >
-          {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          <span key={isOpen ? 'close-icon' : 'menu-icon'} className="inline-flex items-center justify-center">
+            {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+          </span>
         </button>
       </div>
 
@@ -328,17 +330,18 @@ const OtherGames: React.FC<OtherGamesProps> = ({
           className="w-full sm:flex-1 px-4 py-2.5 sm:py-3 rounded-full border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 text-base"
         />
         <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0 no-scrollbar touch-pan-x">
-          {categories.map(category => (
+          {categories.map((category, catIdx) => (
             <button
-              key={category}
+              type="button"
+              key={`cat-${String(category)}-${catIdx}`}
               onClick={() => setActiveCategory(category)}
-              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm transition-all whitespace-nowrap min-h-[40px] shrink-0 ${
+              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold text-xs sm:text-sm transition-all whitespace-nowrap min-h-[40px] shrink-0 cursor-pointer ${
                 activeCategory === category 
                   ? 'bg-blue-600 text-white shadow-md' 
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {category}
+              <span>{category}</span>
             </button>
           ))}
         </div>
@@ -347,13 +350,9 @@ const OtherGames: React.FC<OtherGamesProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {filteredGames.length > 0 ? (
           filteredGames.map((game, idx) => (
-            <motion.div 
-              key={game.id} 
-              initial={{ opacity: 0, y: 15 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-30px" }}
-              transition={{ duration: 0.4, delay: Math.min(idx * 0.05, 0.3) }}
-              className="group p-4 sm:p-5 rounded-2xl border border-slate-100 hover:border-blue-100 hover:shadow-lg hover:shadow-blue-50/50 transition-all bg-white flex flex-col gap-4"
+            <div 
+              key={game.id ? String(game.id) : `game-fallback-${idx}`} 
+              className="group p-4 sm:p-5 rounded-2xl border border-slate-100 hover:border-blue-100 hover:shadow-lg hover:shadow-blue-50/50 transition-all duration-300 bg-white flex flex-col gap-4"
             >
               <div className="flex items-start gap-3.5 sm:gap-4">
                 <div className="relative w-12 h-12 sm:w-14 sm:h-14 bg-slate-50 rounded-xl flex items-center justify-center shrink-0 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors overflow-hidden">
@@ -396,39 +395,49 @@ const OtherGames: React.FC<OtherGamesProps> = ({
               <div className="flex flex-col gap-3 mt-auto">
                 {game.isUnderMaintenance ? (
                   <button
+                    key="btn-maintenance"
+                    type="button"
                     onClick={() => handlePlayGame(game)}
-                    className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-2.5 font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm shadow-sm shadow-amber-500/20"
+                    className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-xl py-2.5 font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm shadow-sm shadow-amber-500/20 cursor-pointer"
                     title="Jogo em manutenção. Clique para ver detalhes."
                   >
-                    <Wrench className="w-4 h-4" /> <span>Em Manutenção</span>
+                    <Wrench className="w-4 h-4 shrink-0" />
+                    <span>Em Manutenção</span>
                   </button>
                 ) : (
                   <button
+                    key="btn-play"
+                    type="button"
                     onClick={() => handlePlayGame(game)}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-2.5 font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm shadow-sm"
+                    className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl py-2.5 font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] text-sm shadow-sm cursor-pointer"
                   >
-                    <Play className="w-4 h-4 fill-current" /> <span>Jogar Agora</span>
+                    <Play className="w-4 h-4 fill-current shrink-0" />
+                    <span>Jogar Agora</span>
                   </button>
                 )}
                 <div className="flex items-center justify-center gap-4">
-                  <span 
+                  <button
+                    type="button"
                     onClick={() => handleStoreClick(game, 'play')}
-                    className="text-[10px] sm:text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1 transition-colors"
+                    className="text-[10px] sm:text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1 transition-colors bg-transparent border-0 p-0"
                   >
-                    <PlaySquare className="w-3 h-3 shrink-0"/> Google Play
-                  </span>
-                  <span 
+                    <PlaySquare className="w-3 h-3 shrink-0"/>
+                    <span>Google Play</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleStoreClick(game, 'apple')}
-                    className="text-[10px] sm:text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1 transition-colors"
+                    className="text-[10px] sm:text-xs font-bold text-slate-400 hover:text-slate-900 cursor-pointer flex items-center gap-1 transition-colors bg-transparent border-0 p-0"
                   >
-                    <Apple className="w-3 h-3 shrink-0"/> App Store
-                  </span>
+                    <Apple className="w-3 h-3 shrink-0"/>
+                    <span>App Store</span>
+                  </button>
                 </div>
               </div>
-            </motion.div>
+            </div>
           ))
         ) : (
-          <p className="text-center text-slate-500 py-10 col-span-full text-sm sm:text-base">Nenhum jogo encontrado para esta pesquisa.</p>
+          <p key="no-games-found" className="text-center text-slate-500 py-10 col-span-full text-sm sm:text-base">Nenhum jogo encontrado para esta pesquisa.</p>
         )}
       </div>
     </section>
@@ -450,6 +459,13 @@ const ContactAndFooter = ({
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
   const [errors, setErrors] = useState({ email: '', message: '' });
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const submitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (submitTimerRef.current) clearTimeout(submitTimerRef.current);
+    };
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -473,8 +489,8 @@ const ContactAndFooter = ({
 
     if (valid) {
       setIsSubmitted(true);
-      // Aqui você adicionaria a lógica para enviar a mensagem
-      setTimeout(() => {
+      if (submitTimerRef.current) clearTimeout(submitTimerRef.current);
+      submitTimerRef.current = setTimeout(() => {
         setIsSubmitted(false);
         setFormData({ name: '', email: '', message: '' });
       }, 3000);
@@ -550,110 +566,110 @@ const ContactAndFooter = ({
                    ></textarea>
                    {errors.message && <p className="text-red-400 text-xs sm:text-sm mt-1">{errors.message}</p>}
                  </div>
-                 <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-4 py-3.5 font-bold transition-all min-h-[48px] active:scale-[0.98] cursor-pointer">
-                   Enviar Mensagem
-                 </button>
-               </form>
-             )}
-          </div>
-        </div>
+                  <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-4 py-3.5 font-bold transition-all min-h-[48px] active:scale-[0.98] cursor-pointer">
+                    <span>Enviar Mensagem</span>
+                  </button>
+                </form>
+              )}
+           </div>
+         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 mb-12 sm:mb-16">
-           <div className="col-span-2 md:col-span-1">
-             <div className="text-white font-black text-lg sm:text-xl tracking-tight mb-4 sm:mb-6 flex items-center gap-2">
-               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
-                 <Gamepad2 className="w-5 h-5 text-white" />
-               </div>
-               COBRA GAMES JR
-             </div>
-             <div className="text-slate-400 text-xs sm:text-sm leading-relaxed">
-               Jogos para celular que o mundo inteiro joga.
-             </div>
-           </div>
-           <div>
-             <h4 className="text-white font-bold text-sm sm:text-base mb-3 sm:mb-4">Nossos jogos</h4>
-             <ul className="space-y-2 text-xs sm:text-sm text-slate-400">
-               <li><a href="https://play.google.com/store/apps/details?id=com.aistudio.cobrapromax.game&pcampaignid=web_share" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors inline-block py-1">Google Play</a></li>
-             </ul>
-           </div>
-           <div>
-             <h4 className="text-white font-bold text-sm sm:text-base mb-3 sm:mb-4">Empresa</h4>
-             <ul className="space-y-2 text-xs sm:text-sm text-slate-400">
-               <li><a href="#contatos" className="hover:text-blue-400 transition-colors inline-block py-1">Contatos</a></li>
-               <li><Link to="/admin/login" className="hover:text-orange-400 transition-colors opacity-60 hover:opacity-100 inline-block py-1">Painel do Proprietário</Link></li>
-             </ul>
-           </div>
-           <div>
-             <h4 className="text-white font-bold text-sm sm:text-base mb-3 sm:mb-4">Jurídico</h4>
-             <ul className="space-y-2 text-xs sm:text-sm text-slate-400">
-               <li>
-                 <button 
-                   type="button"
-                   onClick={onOpenTermsOfUse}
-                   className="hover:text-blue-400 transition-colors text-left cursor-pointer flex items-center gap-1.5 py-1"
-                 >
-                   Termos de Uso
-                 </button>
-               </li>
-               <li>
-                 <button 
-                   type="button"
-                   onClick={onOpenPrivacyPolicy}
-                   className="hover:text-blue-400 transition-colors text-left cursor-pointer flex items-center gap-1.5 py-1"
-                 >
-                   Política de Privacidade
-                 </button>
-               </li>
-               <li>
-                 <button 
-                   type="button"
-                   onClick={onOpenCookiePolicy}
-                   className="hover:text-blue-400 transition-colors text-left cursor-pointer flex items-center gap-1.5 py-1"
-                 >
-                   Política de Cookies
-                 </button>
-               </li>
-               <li>
-                 <button 
-                   type="button"
-                   onClick={onOpenCookiePreferences}
-                   className="text-xs text-slate-500 hover:text-slate-300 transition-colors text-left cursor-pointer py-1"
-                 >
-                   Preferências de Cookies
-                 </button>
-               </li>
-             </ul>
-           </div>
-        </div>
+         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 mb-12 sm:mb-16">
+            <div className="col-span-2 md:col-span-1">
+              <div className="text-white font-black text-lg sm:text-xl tracking-tight mb-4 sm:mb-6 flex items-center gap-2">
+                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shrink-0">
+                  <Gamepad2 className="w-5 h-5 text-white" />
+                </div>
+                COBRA GAMES JR
+              </div>
+              <div className="text-slate-400 text-xs sm:text-sm leading-relaxed">
+                Jogos para celular que o mundo inteiro joga.
+              </div>
+            </div>
+            <div>
+              <h4 className="text-white font-bold text-sm sm:text-base mb-3 sm:mb-4">Nossos jogos</h4>
+              <ul className="space-y-2 text-xs sm:text-sm text-slate-400">
+                <li><a href="https://play.google.com/store/apps/details?id=com.aistudio.cobrapromax.game&pcampaignid=web_share" target="_blank" rel="noopener noreferrer" className="hover:text-blue-400 transition-colors inline-block py-1">Google Play</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white font-bold text-sm sm:text-base mb-3 sm:mb-4">Empresa</h4>
+              <ul className="space-y-2 text-xs sm:text-sm text-slate-400">
+                <li><a href="#contatos" className="hover:text-blue-400 transition-colors inline-block py-1">Contatos</a></li>
+                <li><Link to="/admin/login" className="hover:text-orange-400 transition-colors opacity-60 hover:opacity-100 inline-block py-1">Painel do Proprietário</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white font-bold text-sm sm:text-base mb-3 sm:mb-4">Jurídico</h4>
+              <ul className="space-y-2 text-xs sm:text-sm text-slate-400">
+                <li>
+                  <button 
+                    type="button"
+                    onClick={onOpenTermsOfUse}
+                    className="hover:text-blue-400 transition-colors text-left cursor-pointer flex items-center gap-1.5 py-1"
+                  >
+                    <span>Termos de Uso</span>
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    type="button"
+                    onClick={onOpenPrivacyPolicy}
+                    className="hover:text-blue-400 transition-colors text-left cursor-pointer flex items-center gap-1.5 py-1"
+                  >
+                    <span>Política de Privacidade</span>
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    type="button"
+                    onClick={onOpenCookiePolicy}
+                    className="hover:text-blue-400 transition-colors text-left cursor-pointer flex items-center gap-1.5 py-1"
+                  >
+                    <span>Política de Cookies</span>
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    type="button"
+                    onClick={onOpenCookiePreferences}
+                    className="text-xs text-slate-500 hover:text-slate-300 transition-colors text-left cursor-pointer py-1"
+                  >
+                    <span>Preferências de Cookies</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+         </div>
 
-        <div className="flex flex-col md:flex-row items-center justify-between pt-6 sm:pt-8 border-t border-slate-800 text-xs sm:text-sm text-slate-500 gap-4 text-center md:text-left">
-          <div>© 2026 COBRA GAMES JR. Todos os direitos reservados.</div>
-          <div className="flex flex-wrap gap-3 sm:gap-4 items-center justify-center">
-            <button 
-              type="button"
-              onClick={onOpenTermsOfUse}
-              className="hover:text-slate-300 transition-colors cursor-pointer py-1"
-            >
-              Termos de Uso
-            </button>
-            <span className="text-slate-700 hidden sm:inline">•</span>
-            <button 
-              type="button"
-              onClick={onOpenPrivacyPolicy}
-              className="hover:text-slate-300 transition-colors cursor-pointer py-1"
-            >
-              Política de Privacidade
-            </button>
-            <span className="text-slate-700 hidden sm:inline">•</span>
-            <button 
-              type="button"
-              onClick={onOpenCookiePolicy}
-              className="hover:text-slate-300 transition-colors cursor-pointer font-medium text-slate-400 py-1"
-            >
-              Política de Cookies
-            </button>
-          </div>
-        </div>
+         <div className="flex flex-col md:flex-row items-center justify-between pt-6 sm:pt-8 border-t border-slate-800 text-xs sm:text-sm text-slate-500 gap-4 text-center md:text-left">
+           <div>© 2026 COBRA GAMES JR. Todos os direitos reservados.</div>
+           <div className="flex flex-wrap gap-3 sm:gap-4 items-center justify-center">
+             <button 
+               type="button"
+               onClick={onOpenTermsOfUse}
+               className="hover:text-slate-300 transition-colors cursor-pointer py-1"
+             >
+               <span>Termos de Uso</span>
+             </button>
+             <span className="text-slate-700 hidden sm:inline">•</span>
+             <button 
+               type="button"
+               onClick={onOpenPrivacyPolicy}
+               className="hover:text-slate-300 transition-colors cursor-pointer py-1"
+             >
+               <span>Política de Privacidade</span>
+             </button>
+             <span className="text-slate-700 hidden sm:inline">•</span>
+             <button 
+               type="button"
+               onClick={onOpenCookiePolicy}
+               className="hover:text-slate-300 transition-colors cursor-pointer font-medium text-slate-400 py-1"
+             >
+               <span>Política de Cookies</span>
+             </button>
+           </div>
+         </div>
       </div>
     </footer>
   );

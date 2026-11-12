@@ -12,23 +12,32 @@ export const TermsOfUseModal: React.FC<TermsOfUseModalProps> = ({
   onClose,
   onOpenPrivacyPolicy,
 }) => {
-  // Prevent body scrolling when modal is open
+  // Prevent body scrolling when modal is open without racing with other modals
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
+    if (!isOpen) return;
+    document.body.style.overflow = 'hidden';
+
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
     };
-  }, [isOpen]);
+    window.addEventListener('keydown', handleEsc);
+
+    return () => {
+      window.removeEventListener('keydown', handleEsc);
+      requestAnimationFrame(() => {
+        if (!document.querySelector('[data-modal-overlay="true"]')) {
+          document.body.style.overflow = '';
+        }
+      });
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   return (
     <div
       id="terms-of-use-modal-overlay"
+      data-modal-overlay="true"
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-2 sm:p-6 overflow-y-auto animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -188,7 +197,7 @@ export const TermsOfUseModal: React.FC<TermsOfUseModalProps> = ({
                 }}
                 className="mt-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer"
               >
-                Abrir Política de Privacidade <ArrowRight className="w-3.5 h-3.5" />
+                <span>Abrir Política de Privacidade</span> <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
           </section>
@@ -249,7 +258,7 @@ export const TermsOfUseModal: React.FC<TermsOfUseModalProps> = ({
               onClick={onClose}
               className="flex-1 sm:flex-initial px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs sm:text-sm transition-colors cursor-pointer shadow-md shadow-blue-600/20"
             >
-              Entendido e Fechar
+              <span>Entendido e Fechar</span>
             </button>
           </div>
         </div>

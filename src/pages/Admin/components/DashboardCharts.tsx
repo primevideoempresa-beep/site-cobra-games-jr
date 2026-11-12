@@ -64,7 +64,7 @@ const DashboardCharts: React.FC<DashboardChartsProps> = ({ data, gameStats }) =>
           <div className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Últimas 24 horas</div>
         </div>
         <div className="h-[250px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <AreaChart data={data}>
               <defs>
                 <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
@@ -92,7 +92,7 @@ const DashboardCharts: React.FC<DashboardChartsProps> = ({ data, gameStats }) =>
           <div className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Cliques vs Aberturas</div>
         </div>
         <div className="h-[300px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
             <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 50 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
               <XAxis 
@@ -154,7 +154,7 @@ const DashboardCharts: React.FC<DashboardChartsProps> = ({ data, gameStats }) =>
           </div>
 
           <div className="h-[260px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0}>
               <BarChart data={deskRacerFunnelData} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                 <XAxis dataKey="etapa" stroke="#71717a" fontSize={11} tickLine={false} axisLine={false} />

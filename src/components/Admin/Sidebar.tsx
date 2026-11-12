@@ -62,6 +62,7 @@ export const Sidebar = React.memo<SidebarProps>(({ activeTab, setActiveTab, onLo
             <span>ADMIN MASTER</span>
           </h1>
           <button 
+            type="button"
             onClick={onClose}
             className="lg:hidden p-2 text-zinc-500 hover:text-white"
             aria-label="Fechar menu"
@@ -73,6 +74,7 @@ export const Sidebar = React.memo<SidebarProps>(({ activeTab, setActiveTab, onLo
       <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
         {menuItems.map((item) => (
           <button
+            type="button"
             key={item.id}
             onClick={() => {
               setActiveTab(item.id);
@@ -89,13 +91,16 @@ export const Sidebar = React.memo<SidebarProps>(({ activeTab, setActiveTab, onLo
               <item.icon className={cn("w-5 h-5", activeTab === item.id ? "text-white" : "text-zinc-500 group-hover:text-orange-500")} />
               <span className="font-medium text-sm">{item.label}</span>
             </div>
-            {activeTab === item.id && <ChevronRight className="w-4 h-4" />}
+            <span className={cn("inline-flex transition-opacity", activeTab === item.id ? "opacity-100" : "opacity-0")} aria-hidden="true">
+              <ChevronRight className="w-4 h-4" />
+            </span>
           </button>
         ))}
       </nav>
 
       <div className="p-4 border-t border-zinc-800">
         <button
+          type="button"
           onClick={onLogout}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-400 hover:bg-red-500/10 hover:text-red-500 transition-all duration-200"
         >

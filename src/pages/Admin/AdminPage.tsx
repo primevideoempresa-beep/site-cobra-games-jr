@@ -67,11 +67,12 @@ const VisitorsTable = React.memo(({ visitorsList, onExport }: any) => (
     <div className="p-8 border-b border-zinc-800 flex justify-between items-center">
       <h3 className="text-xl font-bold text-white">Monitoramento em Tempo Real</h3>
       <button 
+        type="button"
         onClick={onExport}
         disabled={visitorsList.length === 0}
         className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-xl text-sm font-bold transition-all"
       >
-        Exportar CSV
+        <span>Exportar CSV</span>
       </button>
     </div>
     <div className="overflow-x-auto">
@@ -136,6 +137,16 @@ export const AdminPage = () => {
       navigate('/admin/login', { replace: true });
     }
   }, [isAdmin, loading, navigate]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setIsSidebarOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Bloqueio automático de sessão por inatividade (30 minutos) e expiração absoluta (8 horas)
   useEffect(() => {
@@ -380,10 +391,11 @@ export const AdminPage = () => {
             Área restrita. Requer autenticação do proprietário com validação de dois fatores.
           </p>
           <button
+            type="button"
             onClick={() => navigate('/admin/login', { replace: true })}
             className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl transition-all active:scale-95 cursor-pointer text-sm"
           >
-            Ir para Autenticação
+            <span>Ir para Autenticação</span>
           </button>
         </div>
       </div>
@@ -407,7 +419,7 @@ export const AdminPage = () => {
             <ShieldAlert className="w-12 h-12 text-red-500 mb-4" />
             <h3 className="text-xl font-bold text-white mb-2">Erro no Módulo Administrativo</h3>
             <p className="text-zinc-500 text-center max-w-md">Ocorreu um erro ao carregar este componente do painel. Verifique o console para mais detalhes.</p>
-            <button onClick={() => window.location.reload()} className="mt-6 px-6 py-2 bg-zinc-800 text-white rounded-xl font-bold">Tentar Novamente</button>
+            <button type="button" onClick={() => window.location.reload()} className="mt-6 px-6 py-2 bg-zinc-800 text-white rounded-xl font-bold"><span>Tentar Novamente</span></button>
           </div>
         }>
           <header className="mb-8 sm:mb-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pt-14 lg:pt-0">
@@ -415,8 +427,10 @@ export const AdminPage = () => {
             <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-zinc-900/90 backdrop-blur-md border-b border-zinc-800 z-50 flex items-center justify-between px-4">
               <h1 className="text-white font-black text-lg tracking-tight">ADMIN MASTER</h1>
               <button 
+                type="button"
                 onClick={() => setIsSidebarOpen(true)}
                 className="p-2 text-zinc-400 hover:text-white"
+                aria-label="Abrir menu"
               >
                 <Menu className="w-6 h-6" />
               </button>
@@ -465,10 +479,11 @@ export const AdminPage = () => {
                     </div>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setActiveTab('manage_games')}
                     className="w-full sm:w-auto px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-black font-black text-xs rounded-xl transition-all shadow-lg shadow-amber-500/20 shrink-0 text-center"
                   >
-                    Gerenciar no Catálogo
+                    <span>Gerenciar no Catálogo</span>
                   </button>
                 </div>
               )}
@@ -524,6 +539,7 @@ export const AdminPage = () => {
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <button 
+                      type="button"
                       onClick={() => setSelectedGameForStats(null)}
                       className="flex items-center gap-2 text-zinc-400 hover:text-white font-bold text-sm transition-colors"
                     >
@@ -582,10 +598,11 @@ export const AdminPage = () => {
                             <td className="px-6 py-4 text-sm text-emerald-400 font-bold">{game.retentionD1 || 0}</td>
                             <td className="px-6 py-4 text-right">
                               <button 
+                                type="button"
                                 onClick={() => setSelectedGameForStats(game)}
                                 className="bg-zinc-800 hover:bg-orange-500 text-zinc-400 hover:text-white px-4 py-1.5 rounded-lg text-xs font-bold transition-all"
                               >
-                                Detalhes
+                                <span>Detalhes</span>
                               </button>
                             </td>
                           </tr>

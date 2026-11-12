@@ -21,17 +21,20 @@ import { maskEmail } from '../../lib/security';
 export const AdminLoginPage = () => {
   const { 
     user,
-    login, 
+    login,
+    loginWithRedirect,
     isAdmin, 
     is2FAPending, 
     verify2FACode, 
     cancel2FAPending, 
-    loading, 
-    error, 
+    loading,
+    isSigningIn,
+    error,
+    lastErrorCode,
+    canUseRedirectFallback,
     clearError 
   } = useAuth();
   
-  const [isRedirecting, setIsRedirecting] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState(['', '', '', '', '', '']);
   const [backupCodeInput, setBackupCodeInput] = useState('');
   const [useBackupMode, setUseBackupMode] = useState(false);
@@ -45,37 +48,35 @@ export const AdminLoginPage = () => {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
-    if (isAdmin) {
-      navigate('/admin');
+    if (!loading && isAdmin) {
+      navigate('/admin', { replace: true });
     }
-  }, [isAdmin, navigate]);
+  }, [loading, isAdmin, navigate]);
 
   // Focus the first 2FA input box when 2FA pending state is reached
   useEffect(() => {
     if (is2FAPending) {
       setCodeError(null);
       setTwoFactorCode(['', '', '', '', '', '']);
-      setTimeout(() => {
+      const focusTimer = setTimeout(() => {
         if (!useBackupMode && inputRefs.current[0]) {
           inputRefs.current[0].focus();
         }
       }, 150);
+      return () => clearTimeout(focusTimer);
     }
   }, [is2FAPending, useBackupMode]);
 
   const handleGoogleLogin = async () => {
-    try {
-      setIsRedirecting(true);
-      setCodeError(null);
-      const res = await login();
-      if (!res.requires2FA && isAdmin) {
-        navigate('/admin');
-      }
-    } catch {
-      // Handled in auth context
-    } finally {
-      setIsRedirecting(false);
-    }
+    setCodeError(null);
+    clearError();
+    await login();
+  };
+
+  const handleRedirectFallback = async () => {
+    setCodeError(null);
+    clearError();
+    await loginWithRedirect();
   };
 
   const handleDigitChange = (index: number, value: string) => {
@@ -141,7 +142,7 @@ export const AdminLoginPage = () => {
     try {
       const result = await verify2FACode(code);
       if (result.success) {
-        navigate('/admin');
+        navigate('/admin', { replace: true });
       } else {
         setCodeError(result.error || 'Código incorreto. Tente novamente.');
         if (!useBackupMode) {
@@ -167,16 +168,16 @@ export const AdminLoginPage = () => {
 
   useEffect(() => {
     let timer: any;
-    if (loading && !isRedirecting && !is2FAPending) {
+    if (loading && !isSigningIn && !is2FAPending) {
       timer = setTimeout(() => setShowReset(true), 5000);
     } else {
       setShowReset(false);
     }
     return () => clearTimeout(timer);
-  }, [loading, isRedirecting, is2FAPending]);
+  }, [loading, isSigningIn, is2FAPending]);
 
-  // Full page loading state for initial auth check
-  if (loading && !isRedirecting && !is2FAPending) return (
+  // Full page loading state ONLY during initial session restoration
+  if (loading && !isSigningIn && !is2FAPending) return (
     <div className="min-h-screen bg-black flex items-center justify-center p-6">
       <div className="flex flex-col items-center gap-6">
         <div className="relative">
@@ -190,10 +191,11 @@ export const AdminLoginPage = () => {
         </div>
         {showReset && (
           <button 
+            type="button"
             onClick={() => window.location.reload()}
             className="mt-4 px-6 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold transition-all border border-zinc-700"
           >
-            A demora é incomum? Clique para recarregar.
+            <span>A demora é incomum? Clique para recarregar.</span>
           </button>
         )}
       </div>
@@ -254,6 +256,7 @@ export const AdminLoginPage = () => {
                 </p>
               </div>
               <button 
+                type="button"
                 onClick={() => {
                   setCodeError(null);
                   clearError();
@@ -306,27 +309,30 @@ export const AdminLoginPage = () => {
                         className="text-[11px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors px-1"
                         title={maskDigits ? "Exibir dígitos" : "Ocultar dígitos para privacidade"}
                       >
-                        {maskDigits ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                        {maskDigits ? 'Mostrar dígitos' : 'Camuflar dígitos'}
+                        <span key={maskDigits ? 'mask-on' : 'mask-off'} className="inline-flex items-center gap-1">
+                          {maskDigits ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                          <span>{maskDigits ? 'Mostrar dígitos' : 'Camuflar dígitos'}</span>
+                        </span>
                       </button>
                     </div>
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => submit2FACode()}
                     disabled={isVerifyingCode || twoFactorCode.join('').length !== 6}
                     className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-[0.98] shadow-lg shadow-orange-500/20 cursor-pointer"
                   >
                     {isVerifyingCode ? (
-                      <>
+                      <span key="verifying" className="inline-flex items-center gap-2">
                         <Loader2 className="w-5 h-5 animate-spin" />
-                        Validando Código...
-                      </>
+                        <span>Validando Código...</span>
+                      </span>
                     ) : (
-                      <>
+                      <span key="verify-idle" className="inline-flex items-center gap-2">
                         <CheckCircle2 className="w-5 h-5" />
-                        Confirmar e Acessar Painel
-                      </>
+                        <span>Confirmar e Acessar Painel</span>
+                      </span>
                     )}
                   </button>
                 </>
@@ -357,19 +363,24 @@ export const AdminLoginPage = () => {
                       className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 p-1"
                       title={maskBackupCode ? "Mostrar código" : "Ocultar código"}
                     >
-                      {maskBackupCode ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      <span key={maskBackupCode ? 'backup-mask-on' : 'backup-mask-off'} className="inline-flex">
+                        {maskBackupCode ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </span>
                     </button>
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => submit2FACode()}
                     disabled={isVerifyingCode || !backupCodeInput.trim()}
                     className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-black py-3.5 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-[0.98] cursor-pointer"
                   >
                     {isVerifyingCode ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span key="verifying-backup" className="inline-flex">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      </span>
                     ) : (
-                      'Validar Código de Backup'
+                      <span key="verify-backup-idle">Validar Código de Backup</span>
                     )}
                   </button>
                 </div>
@@ -386,7 +397,7 @@ export const AdminLoginPage = () => {
                     }}
                     className="text-orange-400 hover:text-orange-300 font-semibold underline underline-offset-4 transition-colors"
                   >
-                    {useBackupMode ? 'Voltar para código do Authenticator' : 'Não tem o celular? Use código de backup'}
+                    <span>{useBackupMode ? 'Voltar para código do Authenticator' : 'Não tem o celular? Use código de backup'}</span>
                   </button>
 
                   <button
@@ -396,7 +407,7 @@ export const AdminLoginPage = () => {
                     title="Ajuda com relógio"
                   >
                     <HelpCircle className="w-3.5 h-3.5" />
-                    Ajuda
+                    <span>Ajuda</span>
                   </button>
                 </div>
 
@@ -413,7 +424,7 @@ export const AdminLoginPage = () => {
                   className="w-full mt-1 py-2.5 text-zinc-500 hover:text-white text-xs font-bold transition-colors flex items-center justify-center gap-2"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  Cancelar e trocar de conta
+                  <span>Cancelar e trocar de conta</span>
                 </button>
               </div>
             </div>
@@ -421,22 +432,34 @@ export const AdminLoginPage = () => {
             /* STEP 1: Initial Google Sign In */
             <>
               <button
+                type="button"
                 onClick={handleGoogleLogin}
-                disabled={isRedirecting || loading}
-                className="w-full bg-white hover:bg-zinc-100 disabled:bg-zinc-200 text-black font-black py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-3 mb-6 active:scale-[0.98] disabled:scale-100 disabled:opacity-80 shadow-xl cursor-pointer"
+                disabled={isSigningIn || loading}
+                className="w-full bg-white hover:bg-zinc-100 disabled:bg-zinc-200 text-black font-black py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-3 mb-4 active:scale-[0.98] disabled:scale-100 disabled:opacity-80 shadow-xl cursor-pointer"
               >
-                {isRedirecting ? (
-                  <>
+                {isSigningIn ? (
+                  <span key="signing-in" className="inline-flex items-center gap-3">
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Conectando com o Google...
-                  </>
+                    <span>Conectando com o Google...</span>
+                  </span>
                 ) : (
-                  <>
+                  <span key="google-idle" className="inline-flex items-center gap-3">
                     <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
                     <span>Entrar com Google</span>
-                  </>
+                  </span>
                 )}
               </button>
+
+              {canUseRedirectFallback && lastErrorCode === 'auth/popup-blocked' && (
+                <button
+                  type="button"
+                  onClick={handleRedirectFallback}
+                  disabled={isSigningIn || loading}
+                  className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 text-white font-bold py-3 rounded-2xl transition-all flex items-center justify-center gap-2 mb-4 border border-zinc-700 text-xs cursor-pointer"
+                >
+                  <span>Entrar via redirecionamento Google</span>
+                </button>
+              )}
 
               <div className="space-y-4">
                 <div className="p-4 bg-zinc-800/50 rounded-2xl border border-zinc-700/50">
@@ -468,6 +491,7 @@ export const AdminLoginPage = () => {
 
         {/* Back Link */}
         <button
+          type="button"
           onClick={() => navigate('/')}
           className="mt-8 flex items-center gap-2 text-zinc-500 hover:text-white transition-colors mx-auto font-bold text-sm cursor-pointer"
         >

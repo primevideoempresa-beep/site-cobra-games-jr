@@ -138,20 +138,21 @@ export const SeedUtility = () => {
       )}
 
       <button 
+        type="button"
         onClick={seedData}
         disabled={isSeeding}
         className="w-full bg-white hover:bg-zinc-100 disabled:opacity-50 text-black font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-95"
       >
         {isSeeding ? (
-          <>
+          <span key="seeding" className="inline-flex items-center gap-2">
             <Loader2 className="w-5 h-5 animate-spin" />
-            Migrando Dados...
-          </>
+            <span>Migrando Dados...</span>
+          </span>
         ) : (
-          <>
+          <span key="seed-idle" className="inline-flex items-center gap-2">
             <Database className="w-5 h-5" />
-            Iniciar Sincronização
-          </>
+            <span>Iniciar Sincronização</span>
+          </span>
         )}
       </button>
 
