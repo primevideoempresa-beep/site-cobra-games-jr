@@ -2,13 +2,21 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import AdmZip from 'adm-zip';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { initializeApp, getApps, App, cert } from 'firebase-admin/app';
 import { getStorage } from 'firebase-admin/storage';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import {
+  inspectGameZip,
+  publishGameZip,
+  safeExtractZip,
+  sanitizeSlug,
+  isValidSlug,
+  PublishError,
+  MAX_ZIP_SIZE_BYTES,
+} from './server-publisher.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,16 +91,32 @@ if (!fs.existsSync(baseGamesDir)) {
 }
 
 // Setup multer for ZIP uploads
-const upload = multer({
-  dest: '/tmp/uploads/',
-  limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
-});
-
-if (!fs.existsSync('/tmp/uploads/')) {
-  fs.mkdirSync('/tmp/uploads/', { recursive: true });
+const uploadDir = '/tmp/uploads/';
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-async function verifyAdminViaUserTokenFirestoreRest(idToken: string, email: string): Promise<boolean> {
+const upload = multer({
+  dest: uploadDir,
+  limits: { fileSize: MAX_ZIP_SIZE_BYTES } // 100MB limit
+});
+
+function safeUnlink(filePath?: string | null) {
+  if (!filePath) return;
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch {
+    // Ignore cleanup failures
+  }
+}
+
+async function verifyAdminViaUserTokenFirestoreRest(
+  idToken: string,
+  email: string,
+  uid: string
+): Promise<boolean> {
   const databaseId = firebaseConfig.firestoreDatabaseId || '(default)';
   const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(firebaseConfig.projectId)}/databases/${encodeURIComponent(databaseId)}/documents/authorized_admins/${encodeURIComponent(email)}`;
   const resp = await fetch(url, {
@@ -100,14 +124,25 @@ async function verifyAdminViaUserTokenFirestoreRest(idToken: string, email: stri
       Authorization: `Bearer ${idToken}`,
     },
   });
-  return resp.ok;
+  if (!resp.ok) return false;
+  try {
+    const docJson: any = await resp.json();
+    const fields = docJson?.fields || {};
+    const verified = fields.verified?.booleanValue;
+    const docUid = fields.uid?.stringValue;
+    if (verified === false) return false;
+    if (docUid && docUid !== uid) return false;
+    return true;
+  } catch {
+    return true;
+  }
 }
 
 // Middleware to verify Admin Token (Security Pillar 8)
 async function verifyAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Não autorizado. Token ausente.' });
+    return res.status(401).json({ error: 'Não autorizado. Token ausente.', code: 'AUTH_MISSING_TOKEN' });
   }
 
   const idToken = authHeader.split('Bearer ')[1];
@@ -116,7 +151,7 @@ async function verifyAdmin(req: express.Request, res: express.Response, next: ex
     const email = decodedToken.email?.trim().toLowerCase();
 
     if (!email || !decodedToken.email_verified) {
-      return res.status(403).json({ error: 'Acesso negado. E-mail não verificado.' });
+      return res.status(403).json({ error: 'Acesso negado. E-mail não verificado.', code: 'AUTH_UNVERIFIED_EMAIL' });
     }
 
     // Security Pillar: Verify admin identity via Firestore (Dynamic Authorization)
@@ -130,7 +165,7 @@ async function verifyAdmin(req: express.Request, res: express.Response, next: ex
     } catch (dbErr: any) {
       const msg = String(dbErr?.message || '');
       if (dbErr?.code === 7 || msg.includes('PERMISSION_DENIED')) {
-        isAuthorized = await verifyAdminViaUserTokenFirestoreRest(idToken, email);
+        isAuthorized = await verifyAdminViaUserTokenFirestoreRest(idToken, email, decodedToken.uid);
       } else {
         throw dbErr;
       }
@@ -138,165 +173,240 @@ async function verifyAdmin(req: express.Request, res: express.Response, next: ex
 
     if (!isAuthorized) {
       console.warn('Unauthorized admin attempt blocked.');
-      return res.status(403).json({ error: 'Acesso negado. Esta conta não possui privilégios administrativos.' });
+      return res.status(403).json({
+        error: 'Acesso negado. Esta conta não possui privilégios administrativos.',
+        code: 'AUTH_FORBIDDEN',
+      });
     }
 
     (req as any).user = decodedToken;
     next();
   } catch (error) {
     console.error('Auth Error:', error);
-    res.status(401).json({ error: 'Sessão administrativa inválida.' });
+    res.status(401).json({ error: 'Sessão administrativa inválida ou expirada.', code: 'AUTH_INVALID_SESSION' });
   }
 }
 
-// Helper to ensure game is extracted (Persistence Pillar 2)
+// Helper to ensure game is extracted safely (Persistence Pillar 2)
 async function ensureGameExtracted(slug: string): Promise<boolean> {
+  if (!isValidSlug(slug)) return false;
+
   const targetDir = path.join(baseGamesDir, slug);
-  
+
   // If already extracted, return
   if (fs.existsSync(targetDir) && fs.existsSync(path.join(targetDir, 'index.html'))) {
     return true;
   }
 
-  // Try to download from Storage
-  const remoteFile = bucket.file(`games/${slug}.zip`);
-  const [exists] = await remoteFile.exists();
-
-  if (!exists) return false;
-
-  const localZipPath = path.join('/tmp', `${slug}.zip`);
-  await remoteFile.download({ destination: localZipPath });
-
+  const localZipPath = path.join('/tmp', `hydrate-${slug}-${Date.now()}.zip`);
   try {
-    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-    const zip = new AdmZip(localZipPath);
-    zip.extractAllTo(targetDir, true);
-    fs.unlinkSync(localZipPath);
-    return true;
-  } catch (err) {
-    console.error('Extraction error for', slug, err);
+    const remoteFile = bucket.file(`games/${slug}.zip`);
+    const [exists] = await remoteFile.exists();
+    if (!exists) return false;
+
+    await remoteFile.download({ destination: localZipPath });
+    safeExtractZip(localZipPath, targetDir);
+    return fs.existsSync(path.join(targetDir, 'index.html'));
+  } catch (err: any) {
+    console.warn(`[Storage] Auto-hidratação indisponível para "${slug}":`, err?.message || err);
     return false;
+  } finally {
+    safeUnlink(localZipPath);
   }
 }
 
 // API Routes
 app.post('/api/games/upload', verifyAdmin, upload.single('zip'), async (req, res) => {
+  // Allow enough time for isolated npm install + Vite build
+  req.setTimeout(5 * 60 * 1000);
+  res.setTimeout(5 * 60 * 1000);
+
   if (!req.file) {
-    return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
+    return res.status(400).json({ error: 'Nenhum arquivo ZIP enviado.', code: 'MISSING_FILE' });
   }
 
-  const { title } = req.body;
-  if (!title) {
-    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    return res.status(400).json({ error: 'Título do jogo é obrigatório.' });
+  const rawTitle = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+  if (!rawTitle) {
+    safeUnlink(req.file.path);
+    return res.status(400).json({ error: 'Título do jogo é obrigatório.', code: 'MISSING_TITLE' });
   }
 
-  const slug = title.toLowerCase().replace(/[^a-z0-9]/g, '-');
-  const targetDir = path.join(baseGamesDir, slug);
+  const slug = sanitizeSlug(rawTitle);
+  let compiledZipPath: string | null = null;
 
   try {
-    // 1. Upload ZIP to Permanent Storage (Persistence Pillar 2)
-    const destination = `games/${slug}.zip`;
-    await bucket.upload(req.file.path, {
-      destination,
-      metadata: {
-        contentType: 'application/zip',
-        cacheControl: 'public, max-age=31536000',
-      }
-    });
-
-    // 2. Extract locally for immediate use
-    if (fs.existsSync(targetDir)) {
-      fs.rmSync(targetDir, { recursive: true, force: true });
-    }
-    fs.mkdirSync(targetDir, { recursive: true });
-
-    const zip = new AdmZip(req.file.path);
-    zip.extractAllTo(targetDir, true);
-
-    // Verify index.html exists
-    const hasIndex = fs.existsSync(path.join(targetDir, 'index.html'));
-    if (!hasIndex) {
-      // Clean up storage if invalid
-      await bucket.file(destination).delete().catch(() => {});
-      fs.rmSync(targetDir, { recursive: true, force: true });
-      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-      return res.status(400).json({ error: 'O ZIP deve conter um arquivo index.html na raiz.' });
-    }
-
-    // Clean up local temp upload
-    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-
-    res.json({
-      success: true,
+    // 1. Inspect, compile (if React/Vite/TS/JS) in isolated workspace, and publish locally
+    const result = await publishGameZip({
+      zipPath: req.file.path,
       slug,
-      iframeUrl: `/games/${slug}/index.html`
+      baseGamesDir,
+      fileSize: req.file.size,
+    });
+    compiledZipPath = result.compiledZipPath;
+
+    // 2. Upload compiled package to Firebase Storage for persistence across restarts
+    let storageSynced = false;
+    let storageWarning: string | undefined;
+    try {
+      const destination = `games/${slug}.zip`;
+      await bucket.upload(result.compiledZipPath, {
+        destination,
+        metadata: {
+          contentType: 'application/zip',
+          cacheControl: 'public, max-age=31536000',
+        },
+      });
+      storageSynced = true;
+    } catch (storageErr: any) {
+      const msg = String(storageErr?.message || storageErr);
+      console.warn(`[Storage] Falha ao sincronizar ${slug}.zip no Firebase Storage:`, msg);
+      storageWarning =
+        'Jogo publicado com sucesso no servidor. A sincronização com o Firebase Storage não pôde ser concluída neste ambiente.';
+    }
+
+    return res.json({
+      success: true,
+      slug: result.slug,
+      iframeUrl: result.iframeUrl,
+      projectType: result.projectType,
+      projectTypeLabel: result.projectTypeLabel,
+      compiled: result.compiled,
+      storageSynced,
+      storageWarning,
+      warnings: result.warnings,
     });
   } catch (err: any) {
-    console.error('Extraction error:', err);
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    res.status(500).json({ error: 'Erro ao extrair o jogo: ' + err.message });
+    if (err instanceof PublishError) {
+      console.error(`[PublishError] (${err.code}) ${err.message}`);
+      return res.status(err.status).json({
+        error: err.message,
+        code: err.code,
+        details: err.details,
+      });
+    }
+
+    console.error('Upload/Publish unexpected error:', err);
+    return res.status(500).json({
+      error: 'Erro interno ao processar e publicar o jogo.',
+      code: 'UPLOAD_FAILED',
+      details: err?.message,
+    });
+  } finally {
+    safeUnlink(req.file?.path);
+    safeUnlink(compiledZipPath);
   }
 });
 
 // Admin Verification API
 app.post('/api/games/verify', verifyAdmin, upload.single('zip'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file' });
+  if (!req.file) {
+    return res.status(400).json({ error: 'Nenhum arquivo ZIP enviado.', code: 'MISSING_FILE' });
+  }
 
   try {
-    const zip = new AdmZip(req.file.path);
-    const zipEntries = zip.getEntries();
-    
-    const results = {
-      hasIndex: false,
-      missingAssets: [] as string[],
-      dangerousFiles: [] as string[],
-      totalFiles: zipEntries.length,
-      size: req.file.size,
-      isApto: false
-    };
-
-    zipEntries.forEach(entry => {
-      const name = entry.entryName.toLowerCase();
-      if (name === 'index.html' || name.endsWith('/index.html')) results.hasIndex = true;
-      
-      // Basic security check (Security Pillar 3)
-      if (name.endsWith('.exe') || name.endsWith('.bat') || name.endsWith('.sh') || name.includes('..')) {
-        results.dangerousFiles.push(entry.entryName);
-      }
-    });
-
-    results.isApto = results.hasIndex && results.dangerousFiles.length === 0;
-    
-    if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    res.json(results);
+    const results = inspectGameZip(req.file.path, req.file.size);
+    return res.json(results);
   } catch (err: any) {
-    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    res.status(500).json({ error: err.message });
+    if (err instanceof PublishError) {
+      return res.status(err.status).json({
+        error: err.message,
+        code: err.code,
+        details: err.details,
+      });
+    }
+
+    console.error('ZIP verification error:', err);
+    return res.status(500).json({
+      error: 'Erro ao analisar o arquivo ZIP.',
+      code: 'VERIFY_FAILED',
+      details: err?.message,
+    });
+  } finally {
+    safeUnlink(req.file?.path);
   }
 });
 
-// Serve Games with auto-hydration (Persistence Pillar 5)
-app.get('/games/:slug/*', async (req, res, next) => {
+// Ensure any unmatched /api/* route ALWAYS returns JSON instead of HTML
+app.all('/api/*', (req, res) => {
+  return res.status(404).json({
+    error: `Endpoint não encontrado: ${req.method} ${req.originalUrl}`,
+    code: 'API_NOT_FOUND',
+  });
+});
+
+// Redirect /games/:slug -> /games/:slug/ so relative assets resolve properly
+app.get('/games/:slug', (req, res) => {
   const { slug } = req.params;
-  const filePath = req.params[0] || 'index.html';
-  
+  if (!isValidSlug(slug)) {
+    return res.status(400).send('Identificador de jogo inválido.');
+  }
+  return res.redirect(302, `/games/${slug}/`);
+});
+
+// Serve Games with auto-hydration & path-traversal protection (Persistence Pillar 5)
+app.get('/games/:slug/*', async (req, res) => {
+  const { slug } = req.params;
+  if (!isValidSlug(slug)) {
+    return res.status(400).send('Identificador de jogo inválido.');
+  }
+
+  const rawFilePath = (req.params as Record<string, string>)[0] || 'index.html';
+
   try {
     const success = await ensureGameExtracted(slug);
     if (!success) {
       return res.status(404).send('Jogo não encontrado ou falha na sincronização.');
     }
-    
-    const absolutePath = path.join(baseGamesDir, slug, filePath);
-    if (fs.existsSync(absolutePath)) {
-      res.sendFile(absolutePath);
-    } else {
-      res.status(404).send('Arquivo do jogo não encontrado.');
+
+    const gameRoot = path.resolve(baseGamesDir, slug);
+    let resolvedPath = path.resolve(gameRoot, rawFilePath);
+
+    if (resolvedPath !== gameRoot && !resolvedPath.startsWith(gameRoot + path.sep)) {
+      return res.status(403).send('Acesso negado.');
     }
+
+    if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isDirectory()) {
+      resolvedPath = path.join(resolvedPath, 'index.html');
+    }
+
+    if (fs.existsSync(resolvedPath) && fs.statSync(resolvedPath).isFile()) {
+      return res.sendFile(resolvedPath);
+    }
+
+    return res.status(404).send('Arquivo do jogo não encontrado.');
   } catch (err) {
     console.error('Serve game error:', err);
-    res.status(500).send('Erro interno ao servir o jogo.');
+    return res.status(500).send('Erro interno ao servir o jogo.');
   }
+});
+
+// Express JSON error handler (catches Multer & unexpected middleware errors without emitting HTML)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        error: `O arquivo ZIP excede o limite máximo permitido de ${Math.round(MAX_ZIP_SIZE_BYTES / 1024 / 1024)} MB.`,
+        code: 'LIMIT_FILE_SIZE',
+      });
+    }
+    return res.status(400).json({
+      error: `Erro no upload do arquivo: ${err.message}`,
+      code: err.code || 'MULTER_ERROR',
+    });
+  }
+
+  if (req.originalUrl.startsWith('/api')) {
+    return res.status(err?.status || 500).json({
+      error: err?.message || 'Erro interno no servidor.',
+      code: err?.code || 'INTERNAL_SERVER_ERROR',
+    });
+  }
+
+  return next(err);
 });
 
 // Initialize Vite or Static Server
@@ -308,7 +418,7 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
-    
+
     // Serve index.html for all non-API routes in dev
     app.get('*', async (req, res, next) => {
       if (req.url.startsWith('/api') || req.url.startsWith('/games')) {
@@ -340,3 +450,4 @@ async function startServer() {
 }
 
 startServer();
+

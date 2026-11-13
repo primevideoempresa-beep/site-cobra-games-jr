@@ -256,7 +256,7 @@ export const GamePlayerPage: React.FC = () => {
             </div>
           </div>
         ) : game.iframeUrl ? (
-          <div className="flex-1 bg-black relative">
+          <div className={`flex-1 bg-black relative ${isFullscreen ? 'h-full' : 'min-h-[65vh] sm:min-h-[520px]'}`}>
             {/* Professional Loading Layer */}
             {!isGameReady && !loadError && (
               <div className="absolute inset-0 z-20 bg-slate-950 flex flex-col items-center justify-center p-6">
@@ -292,9 +292,9 @@ export const GamePlayerPage: React.FC = () => {
               ref={iframeRef}
               src={game.iframeUrl}
               title={game.title}
-              className={`w-full h-full border-0 transition-opacity duration-1000 ${isGameReady ? 'opacity-100' : 'opacity-0'}`}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              sandbox="allow-scripts allow-forms allow-popups allow-pointer-lock"
+              className={`w-full h-full border-0 transition-opacity duration-1000 ${isFullscreen ? 'min-h-screen' : 'min-h-[65vh] sm:min-h-[520px]'} ${isGameReady ? 'opacity-100' : 'opacity-0'}`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock"
               allowFullScreen
               onLoad={() => {
                 if (loadTimeoutRef.current) clearTimeout(loadTimeoutRef.current);

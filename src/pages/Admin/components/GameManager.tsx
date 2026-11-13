@@ -1,26 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import JSZip from 'jszip';
 import { 
   Plus, 
   Search, 
   Edit2, 
   Trash2, 
-  ExternalLink, 
   Star, 
   Gamepad2,
   Save,
   X,
   Loader2,
-  Eye,
   Info,
   Image as ImageIcon,
   Wrench,
   AlertTriangle,
-  FileArchive,
-  BarChart3,
   CheckCircle2,
   UploadCloud,
-  ChevronRight
+  Cpu
 } from 'lucide-react';
 import { 
   collection, 
@@ -34,12 +29,139 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { db, auth } from '../../../lib/firebase';
+import { LoggerService } from '../../../services/logger';
 import { toast } from 'sonner';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+const MAX_ZIP_BYTES = 100 * 1024 * 1024;
+
+class PublishClientError extends Error {
+  details?: string;
+  code?: string;
+  status?: number;
+
+  constructor(message: string, details?: string, code?: string, status?: number) {
+    super(message);
+    this.name = 'PublishClientError';
+    this.details = details;
+    this.code = code;
+    this.status = status;
+  }
+}
+
+async function safeReadJsonResponse<T = any>(
+  response: Response,
+  actionLabel: string
+): Promise<T> {
+  const contentType = response.headers.get('content-type') || '';
+  const rawText = await response.text();
+
+  let parsed: any = null;
+  let isJson = false;
+
+  if (rawText && rawText.trim().length > 0) {
+    const trimmed = rawText.trim();
+    if (contentType.includes('application/json') || trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        parsed = JSON.parse(trimmed);
+        isJson = true;
+      } catch {
+        isJson = false;
+      }
+    }
+  }
+
+  if (!isJson) {
+    const cleanPreview = rawText
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 200);
+
+    await LoggerService.logError(
+      `Resposta não-JSON ao ${actionLabel} (HTTP ${response.status})`,
+      {
+        status: response.status,
+        contentType,
+        preview: cleanPreview || 'Resposta vazia',
+      },
+      'general'
+    );
+
+    if (response.status === 413) {
+      throw new PublishClientError(
+        'O arquivo ZIP excede o tamanho máximo permitido pelo servidor (100 MB).',
+        cleanPreview,
+        'PAYLOAD_TOO_LARGE',
+        413
+      );
+    }
+    if (response.status === 502 || response.status === 504) {
+      throw new PublishClientError(
+        `Tempo esgotado ou falha de comunicação com o servidor ao ${actionLabel} (HTTP ${response.status}).`,
+        cleanPreview,
+        'GATEWAY_ERROR',
+        response.status
+      );
+    }
+    if (response.status === 404) {
+      throw new PublishClientError(
+        `Serviço de publicação indisponível neste endereço (HTTP 404). Verifique se o servidor backend está ativo.`,
+        cleanPreview,
+        'ENDPOINT_NOT_FOUND',
+        404
+      );
+    }
+
+    throw new PublishClientError(
+      `O servidor retornou uma resposta inesperada (HTTP ${response.status}) ao ${actionLabel}.`,
+      cleanPreview || undefined,
+      'INVALID_SERVER_RESPONSE',
+      response.status
+    );
+  }
+
+  if (!response.ok) {
+    const errMsg = parsed?.error || parsed?.message || `Erro HTTP ${response.status} ao ${actionLabel}.`;
+    const errDetails = typeof parsed?.details === 'string' ? parsed.details : undefined;
+    const errCode = typeof parsed?.code === 'string' ? parsed.code : `HTTP_${response.status}`;
+
+    await LoggerService.logError(
+      `Erro ao ${actionLabel}: ${errMsg}`,
+      {
+        status: response.status,
+        code: errCode,
+        details: errDetails?.slice(0, 400),
+      },
+      'general'
+    );
+
+    throw new PublishClientError(errMsg, errDetails, errCode, response.status);
+  }
+
+  return parsed as T;
+}
+
+interface VerificationResult {
+  hasIndex: boolean;
+  hasPackageJson?: boolean;
+  projectType?: 'html5' | 'react-vite' | 'invalid';
+  projectTypeLabel?: string;
+  detectedRoot?: string | null;
+  requiresBuild?: boolean;
+  buildScript?: string | null;
+  missingAssets: string[];
+  dangerousFiles: string[];
+  totalFiles: number;
+  size: number;
+  isApto: boolean;
+  errorMessage?: string;
+  warnings?: string[];
 }
 
 interface Game {
@@ -69,6 +191,7 @@ export const GameManager = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [zipValidation, setZipValidation] = useState<{ valid: boolean; error?: string } | null>(null);
+  const [publishError, setPublishError] = useState<{ message: string; details?: string } | null>(null);
 
   // Form State
   const [formData, setFormData] = useState<Partial<Game>>({
@@ -106,9 +229,14 @@ export const GameManager = () => {
     };
   }, []);
 
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
+
   const handleOpenModal = (game?: Game) => {
     setZipFile(null);
     setZipValidation(null);
+    setVerificationResult(null);
+    setPublishError(null);
     if (game) {
       setEditingGame(game);
       setFormData({
@@ -138,59 +266,71 @@ export const GameManager = () => {
     setIsModalOpen(true);
   };
 
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationResult, setVerificationResult] = useState<{
-    hasIndex: boolean;
-    missingAssets: string[];
-    dangerousFiles: string[];
-    totalFiles: number;
-    size: number;
-    isApto: boolean;
-  } | null>(null);
-
   const handleZipChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
 
-    if (!file.name.endsWith('.zip')) {
-      setZipValidation({ valid: false, error: 'O arquivo deve ser um ZIP.' });
+    setPublishError(null);
+    setZipFile(null);
+
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+      setZipValidation({ valid: false, error: 'O arquivo selecionado deve ter extensão .zip.' });
+      setVerificationResult(null);
+      return;
+    }
+
+    if (file.size > MAX_ZIP_BYTES) {
+      setZipValidation({ valid: false, error: 'O arquivo ZIP excede o limite máximo de 100 MB.' });
+      setVerificationResult(null);
       return;
     }
 
     setIsVerifying(true);
     setVerificationResult(null);
+    setZipValidation(null);
+
     try {
-      const formData = new FormData();
-      formData.append('zip', file);
+      const uploadForm = new FormData();
+      uploadForm.append('zip', file);
 
       const idToken = await auth.currentUser?.getIdToken();
+      if (!idToken) {
+        throw new PublishClientError('Sessão administrativa expirada. Faça login novamente.');
+      }
+
       const response = await fetch('/api/games/verify', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${idToken}`
         },
-        body: formData,
+        body: uploadForm,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Erro na verificação');
-      }
-
-      const result = await response.json();
+      const result = await safeReadJsonResponse<VerificationResult>(response, 'verificar o pacote ZIP');
       setVerificationResult(result);
-      
+
       if (result.isApto) {
         setZipFile(file);
         setZipValidation({ valid: true });
-        toast.success('ZIP validado com sucesso!');
+        if (result.requiresBuild) {
+          toast.success('Projeto React/Vite detectado! Será compilado automaticamente ao publicar.');
+        } else {
+          toast.success('Jogo HTML5 validado com sucesso!');
+        }
       } else {
-        setZipValidation({ valid: false, error: 'O jogo possui falhas críticas.' });
-        toast.error('Falha na verificação automática.');
+        const errorMsg = result.errorMessage || 'O pacote ZIP não atende aos requisitos de publicação.';
+        setZipValidation({ valid: false, error: errorMsg });
+        toast.error(errorMsg);
       }
     } catch (err: any) {
-      setZipValidation({ valid: false, error: err.message });
-      toast.error('Erro ao verificar ZIP.');
+      const msg = err?.message || 'Erro ao verificar o arquivo ZIP.';
+      setZipValidation({ valid: false, error: msg });
+      setPublishError({
+        message: msg,
+        details: err instanceof PublishClientError ? err.details : undefined,
+      });
+      toast.error(msg);
     } finally {
       setIsVerifying(false);
     }
@@ -204,16 +344,21 @@ export const GameManager = () => {
     }
 
     setIsSaving(true);
+    setPublishError(null);
     try {
       let finalIframeUrl = formData.iframeUrl;
 
-      // If a new ZIP is provided, upload and extract it
+      // If a new ZIP is provided, verify/compile (if React/Vite) and publish it
       if (zipFile) {
         const uploadData = new FormData();
         uploadData.append('zip', zipFile);
         uploadData.append('title', formData.title);
 
         const idToken = await auth.currentUser?.getIdToken();
+        if (!idToken) {
+          throw new PublishClientError('Sessão administrativa expirada. Faça login novamente.');
+        }
+
         const uploadRes = await fetch('/api/games/upload', {
           method: 'POST',
           headers: {
@@ -222,26 +367,42 @@ export const GameManager = () => {
           body: uploadData,
         });
 
-        if (!uploadRes.ok) {
-          const error = await uploadRes.json();
-          throw new Error(error.error || 'Erro no upload do jogo');
-        }
+        const uploadResult = await safeReadJsonResponse<{
+          success: boolean;
+          slug: string;
+          iframeUrl: string;
+          compiled?: boolean;
+          projectTypeLabel?: string;
+          storageSynced?: boolean;
+          storageWarning?: string;
+        }>(uploadRes, 'compilar e publicar o jogo');
 
-        const uploadResult = await uploadRes.json();
         finalIframeUrl = uploadResult.iframeUrl;
+
+        if (uploadResult.compiled) {
+          toast.success('Projeto compilado automaticamente e publicado!');
+        }
+        if (uploadResult.storageWarning) {
+          toast.warning(uploadResult.storageWarning);
+        }
       }
+
+      const cleanPayload = Object.fromEntries(
+        Object.entries({
+          ...formData,
+          iframeUrl: finalIframeUrl || '',
+        }).filter(([, value]) => value !== undefined)
+      );
 
       if (editingGame) {
         await updateDoc(doc(db, 'games', editingGame.id), {
-          ...formData,
-          iframeUrl: finalIframeUrl,
+          ...cleanPayload,
           updatedAt: serverTimestamp()
         });
         toast.success('Jogo atualizado com sucesso');
       } else {
         await addDoc(collection(db, 'games'), {
-          ...formData,
-          iframeUrl: finalIframeUrl,
+          ...cleanPayload,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
@@ -250,7 +411,15 @@ export const GameManager = () => {
       setIsModalOpen(false);
     } catch (err: any) {
       console.error('Error saving game:', err);
-      toast.error(err.message || 'Erro ao salvar jogo.');
+      const message = err?.message || 'Erro ao salvar jogo.';
+      const details = err instanceof PublishClientError ? err.details : undefined;
+      setPublishError({ message, details });
+      await LoggerService.logError(
+        `Falha ao publicar jogo "${formData.title}": ${message}`,
+        { details: details?.slice(0, 400) },
+        'general'
+      );
+      toast.error(message);
     } finally {
       setIsSaving(false);
     }
@@ -494,7 +663,11 @@ export const GameManager = () => {
                         <div className="p-4 bg-emerald-500/20 text-emerald-500 rounded-full"><CheckCircle2 className="w-8 h-8" /></div>
                         <div className="text-center">
                           <p className="text-sm font-bold text-white">{zipFile?.name}</p>
-                          <p className="text-xs text-emerald-400 mt-1">Pacote validado com sucesso</p>
+                          <p className="text-xs text-emerald-400 mt-1">
+                            {verificationResult?.requiresBuild
+                              ? 'Projeto React/Vite validado — será compilado automaticamente ao publicar'
+                              : 'Pacote HTML5 validado com sucesso'}
+                          </p>
                         </div>
                       </>
                     ) : (
@@ -504,14 +677,14 @@ export const GameManager = () => {
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-bold text-white">{zipValidation?.error || 'Arraste o arquivo .ZIP do jogo'}</p>
-                          <p className="text-xs text-zinc-500 mt-1">O ZIP deve conter um index.html na raiz</p>
+                          <p className="text-xs text-zinc-500 mt-1">Aceita jogos HTML5 prontos (index.html) ou projetos React, Vite, TS e JS (package.json)</p>
                         </div>
                       </>
                     )}
                     {isVerifying && (
                       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center rounded-[2rem]">
                         <Loader2 className="w-8 h-8 text-orange-500 animate-spin mb-2" />
-                        <p className="text-xs font-black uppercase text-white">Analisando motor do jogo...</p>
+                        <p className="text-xs font-black uppercase text-white">Analisando pacote do jogo...</p>
                       </div>
                     )}
                   </div>
@@ -522,9 +695,24 @@ export const GameManager = () => {
                       "p-5 rounded-2xl border transition-all animate-in fade-in slide-in-from-top-2 duration-300",
                       verificationResult.isApto ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/20"
                     )}>
-                      <div className="flex items-center gap-2 mb-4">
-                        <Info className={cn("w-4 h-4", verificationResult.isApto ? "text-emerald-500" : "text-red-500")} />
-                        <h4 className="text-xs font-black uppercase tracking-widest text-zinc-300">Relatório de Verificação</h4>
+                      <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
+                        <div className="flex items-center gap-2">
+                          <Info className={cn("w-4 h-4", verificationResult.isApto ? "text-emerald-500" : "text-red-500")} />
+                          <h4 className="text-xs font-black uppercase tracking-widest text-zinc-300">Relatório de Verificação</h4>
+                        </div>
+                        {verificationResult.projectTypeLabel && (
+                          <span className={cn(
+                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase",
+                            verificationResult.requiresBuild
+                              ? "bg-blue-500/15 text-blue-300 border border-blue-500/30"
+                              : verificationResult.isApto
+                              ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                              : "bg-red-500/15 text-red-300 border border-red-500/30"
+                          )}>
+                            <Cpu className="w-3 h-3" />
+                            <span>{verificationResult.projectTypeLabel}</span>
+                          </span>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
@@ -537,9 +725,13 @@ export const GameManager = () => {
                           <p className="text-sm font-black text-white">{(verificationResult.size / 1024 / 1024).toFixed(2)} MB</p>
                         </div>
                         <div className="bg-black/20 p-3 rounded-xl border border-white/5">
-                          <p className="text-[9px] uppercase font-bold text-zinc-500">Entry Point</p>
-                          <p className={cn("text-sm font-black", verificationResult.hasIndex ? "text-emerald-500" : "text-red-500")}>
-                            {verificationResult.hasIndex ? 'OK' : 'AUSENTE'}
+                          <p className="text-[9px] uppercase font-bold text-zinc-500">
+                            {verificationResult.requiresBuild ? 'Projeto' : 'Entry Point'}
+                          </p>
+                          <p className={cn("text-sm font-black", (verificationResult.hasIndex || verificationResult.hasPackageJson) ? "text-emerald-500" : "text-red-500")}>
+                            {verificationResult.requiresBuild
+                              ? (verificationResult.hasPackageJson ? 'BUILD AUTO' : 'AUSENTE')
+                              : (verificationResult.hasIndex ? 'OK' : 'AUSENTE')}
                           </p>
                         </div>
                         <div className="bg-black/20 p-3 rounded-xl border border-white/5">
@@ -549,6 +741,14 @@ export const GameManager = () => {
                           </p>
                         </div>
                       </div>
+
+                      {verificationResult.warnings && verificationResult.warnings.length > 0 && (
+                        <div className="mb-3 p-3 bg-blue-500/10 rounded-xl border border-blue-500/20">
+                          <ul className="text-[11px] text-blue-200/80 space-y-1">
+                            {verificationResult.warnings.map((w, i) => <li key={i}>• {w}</li>)}
+                          </ul>
+                        </div>
+                      )}
 
                       {verificationResult.dangerousFiles.length > 0 && (
                         <div className="mb-4 p-3 bg-red-500/10 rounded-xl border border-red-500/20">
@@ -570,6 +770,22 @@ export const GameManager = () => {
                             {verificationResult.missingAssets.map((asset, i) => <li key={i}>• {asset}</li>)}
                           </ul>
                         </div>
+                      )}
+                    </div>
+                  )}
+
+                  {publishError && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-2xl space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-red-300">{publishError.message}</p>
+                        </div>
+                      </div>
+                      {publishError.details && (
+                        <pre className="text-[10px] font-mono text-red-200/80 bg-black/50 border border-red-500/20 rounded-xl p-3 max-h-40 overflow-y-auto whitespace-pre-wrap break-words">
+                          {publishError.details}
+                        </pre>
                       )}
                     </div>
                   )}
@@ -635,7 +851,11 @@ export const GameManager = () => {
                   <span key={isSaving ? 'saving-icon' : 'save-icon'} className="inline-flex items-center">
                     {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
                   </span>
-                  <span>{editingGame ? 'Salvar Alterações' : 'Publicar Jogo'}</span>
+                  <span>
+                    {isSaving
+                      ? (verificationResult?.requiresBuild ? 'Compilando e Publicando...' : 'Publicando...')
+                      : (editingGame ? 'Salvar Alterações' : 'Publicar Jogo')}
+                  </span>
                 </button>
                 <button type="button" onClick={() => setIsModalOpen(false)} className="px-8 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 py-4 rounded-2xl font-black transition-all">
                   <span>Cancelar</span>
