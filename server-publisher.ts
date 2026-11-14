@@ -2,27 +2,67 @@ import AdmZip from 'adm-zip';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+import zlib from 'zlib';
 
 export const MAX_ZIP_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 export const MAX_ZIP_ENTRIES = 5000;
 export const MAX_UNCOMPRESSED_BYTES = 250 * 1024 * 1024; // 250 MB
-export const INSTALL_TIMEOUT_MS = 180_000; // 3 minutes
-export const BUILD_TIMEOUT_MS = 120_000; // 2 minutes
+export const MAX_COMPRESSION_RATIO = 100;
+export const MAX_INDEX_HTML_BYTES = 10 * 1024 * 1024; // 10 MB
 
 const DANGEROUS_EXTENSIONS = [
   '.exe',
   '.bat',
   '.cmd',
   '.sh',
+  '.bash',
+  '.zsh',
   '.ps1',
+  '.psm1',
   '.msi',
   '.dll',
+  '.so',
+  '.dylib',
   '.vbs',
+  '.vbe',
   '.scr',
   '.pif',
   '.com',
+  '.hta',
+  '.cpl',
+  '.lnk',
+  '.reg',
+  '.jar',
+  '.war',
+  '.apk',
+  '.php',
+  '.phtml',
+  '.py',
+  '.rb',
+  '.pl',
+  '.cgi',
+  '.node',
+  '.app',
+  '.dmg',
+  '.deb',
+  '.rpm',
+  '.sys',
+  '.drv',
+  '.elf',
 ];
+
+const DANGEROUS_FILENAMES = new Set([
+  '.htaccess',
+  '.htpasswd',
+  '.npmrc',
+  '.yarnrc',
+  '.yarnrc.yml',
+  '.gitconfig',
+  '.bash_history',
+  '.zsh_history',
+  'id_rsa',
+  'id_ed25519',
+]);
 
 const SKIPPED_DIRS = new Set(['__macosx', 'node_modules', '.git']);
 const SKIPPED_FILES = new Set([
@@ -63,6 +103,7 @@ export interface ZipInspectionResult {
   missingAssets: string[];
   dangerousFiles: string[];
   pathTraversalFiles: string[];
+  duplicateFiles: string[];
   totalFiles: number;
   uncompressedSize: number;
   size: number;
@@ -71,14 +112,45 @@ export interface ZipInspectionResult {
   warnings: string[];
 }
 
+export const DEFAULT_RETAINED_BACKUPS = 3;
+
+export type PublicationState =
+  | 'processing'
+  | 'backup_created'
+  | 'awaiting_firestore_confirmation'
+  | 'confirmed'
+  | 'rolled_back'
+  | 'failed';
+
+export interface PublicationRecord {
+  publishId: string;
+  slug: string;
+  state: PublicationState;
+  createdAt: string;
+  updatedAt: string;
+  confirmedAt?: string;
+  rolledBackAt?: string;
+  firestoreDocId?: string;
+  failureReason?: string;
+  hadPreviousLocal: boolean;
+  hadPreviousRemote: boolean;
+  localBackupDir: string | null;
+  remoteBackupPath: string | null;
+  remoteDestination: string;
+  iframeUrl: string;
+}
+
 export interface PublishResult {
+  publishId: string;
+  state: PublicationState;
   slug: string;
   iframeUrl: string;
   projectType: DetectedProjectType;
   projectTypeLabel: string;
   compiled: boolean;
   compiledZipPath: string;
-  buildLogs?: string;
+  hadPreviousLocal: boolean;
+  localBackupDir: string | null;
   warnings: string[];
 }
 
@@ -110,23 +182,47 @@ export function isValidSlug(slug: string): boolean {
   return /^[a-zA-Z0-9_-]{1,128}$/.test(slug);
 }
 
-export function sanitizeLogOutput(text: string, workspacePaths: string[] = []): string {
-  let clean = text || '';
-  for (const p of workspacePaths) {
-    if (p) {
-      clean = clean.split(p).join('[workspace]');
-    }
-  }
-  clean = clean
-    .replace(/\/tmp\/cg-build-[a-zA-Z0-9_-]+/g, '[workspace]')
-    .replace(/\/app\/applet/g, '[server]')
-    .replace(/AIza[0-9A-Za-z\-_]{35}/g, 'AIza••••')
-    .replace(/Bearer\s+[A-Za-z0-9\-_.]+/gi, 'Bearer [REDACTED]')
-    .replace(/(?:secret|password|token|apiKey|private_key)\s*[:=]\s*["']?[^\s"']+/gi, '[REDACTED]');
+export function isValidPublishId(publishId: string): boolean {
+  return /^[a-zA-Z0-9_-]{8,128}$/.test(publishId);
+}
 
-  const lines = clean.split('\n').filter((line) => line.trim().length > 0);
-  const tail = lines.slice(-40).join('\n');
-  return tail.slice(0, 3500);
+const activeSlugLocks = new Map<string, string>();
+
+export function isSlugPublishLocked(slug: string): boolean {
+  return activeSlugLocks.has(slug);
+}
+
+export function acquireSlugLock(slug: string, operationId: string): void {
+  if (!isValidSlug(slug)) {
+    throw new PublishError('Identificador (slug) do jogo inválido.', 400, 'INVALID_SLUG');
+  }
+  if (activeSlugLocks.has(slug)) {
+    throw new PublishError(
+      `Já existe uma operação de publicação ou restauração em andamento para "${slug}". Aguarde a conclusão antes de tentar novamente.`,
+      409,
+      'PUBLISH_IN_PROGRESS'
+    );
+  }
+  activeSlugLocks.set(slug, operationId);
+}
+
+export function releaseSlugLock(slug: string, operationId: string): void {
+  if (activeSlugLocks.get(slug) === operationId) {
+    activeSlugLocks.delete(slug);
+  }
+}
+
+export async function withSlugLock<T>(
+  slug: string,
+  operationId: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  acquireSlugLock(slug, operationId);
+  try {
+    return await fn();
+  } finally {
+    releaseSlugLock(slug, operationId);
+  }
 }
 
 function normalizeZipEntryPath(rawName: string): {
@@ -134,8 +230,8 @@ function normalizeZipEntryPath(rawName: string): {
   cleanPath: string;
   reason?: string;
 } {
-  if (!rawName || rawName.includes('\0')) {
-    return { valid: false, cleanPath: rawName, reason: 'Nome de arquivo inválido ou byte nulo' };
+  if (!rawName || /[\x00-\x1f\x7f]/.test(rawName)) {
+    return { valid: false, cleanPath: rawName, reason: 'Nome de arquivo inválido ou caractere de controle' };
   }
 
   let normalized = rawName.replace(/\\/g, '/');
@@ -148,17 +244,31 @@ function normalizeZipEntryPath(rawName: string): {
   }
 
   const segments = normalized.split('/').filter((seg) => seg.length > 0);
-  if (segments.some((seg) => seg === '..')) {
-    return { valid: false, cleanPath: rawName, reason: 'Path traversal (..) bloqueado' };
+  if (segments.some((seg) => seg === '..' || seg === '.')) {
+    return { valid: false, cleanPath: rawName, reason: 'Path traversal (.. ou .) bloqueado' };
   }
 
-  return { valid: true, cleanPath: segments.join('/') };
+  const cleanPath = segments.join('/');
+  if (cleanPath.length > 512) {
+    return { valid: false, cleanPath: rawName, reason: 'Caminho de arquivo excessivamente longo' };
+  }
+
+  return { valid: true, cleanPath };
 }
 
-function isSymlinkEntry(entry: AdmZip.IZipEntry): boolean {
-  // Unix file mode is stored in the upper 16 bits of externalFileAttributes (attr)
-  const mode = (entry.header.attr >>> 16) & 0o170000;
-  return mode === 0o120000;
+function getSpecialUnixModeReason(entry: AdmZip.IZipEntry): string | null {
+  const upperAttrs = (entry.header.attr >>> 16) & 0xffff;
+  if (upperAttrs === 0) {
+    return null;
+  }
+  const fileType = upperAttrs & 0o170000;
+  if (fileType === 0o120000) {
+    return 'symlink';
+  }
+  if (fileType !== 0 && fileType !== 0o100000 && fileType !== 0o040000) {
+    return `tipo especial Unix (${fileType.toString(8)})`;
+  }
+  return null;
 }
 
 function shouldSkipPath(cleanPath: string): boolean {
@@ -202,14 +312,18 @@ function detectSingleWrapperRoot(filePaths: string[]): string | null {
   return topSegments.size === 1 ? Array.from(topSegments)[0] : null;
 }
 
-function hasDangerousExtension(cleanPath: string): boolean {
+function isDangerousFile(cleanPath: string): boolean {
   const lower = cleanPath.toLowerCase();
+  const baseName = lower.split('/').pop() || lower;
+  if (DANGEROUS_FILENAMES.has(baseName)) return true;
   return DANGEROUS_EXTENSIONS.some((ext) => lower.endsWith(ext));
 }
 
 function htmlReferencesSourceModules(htmlContent: string): boolean {
-  return /<script[^>]+src=["'][^"']+\.(?:tsx|ts|jsx)(?:\?[^"']*)?["']/i.test(htmlContent) ||
-    /<script[^>]+src=["']\/?src\/[^"']+["']/i.test(htmlContent);
+  return (
+    /<script[^>]+src=["'][^"']+\.(?:tsx|ts|jsx)(?:\?[^"']*)?["']/i.test(htmlContent) ||
+    /<script[^>]+src=["']\/?src\/[^"']+["']/i.test(htmlContent)
+  );
 }
 
 function findMissingHtmlAssets(htmlContent: string, availableRelPaths: Set<string>): string[] {
@@ -236,7 +350,6 @@ function findMissingHtmlAssets(htmlContent: string, availableRelPaths: Set<strin
     const cleanRef = ref.split('?')[0].split('#')[0].replace(/^\.\//, '').replace(/^\//, '');
     if (!cleanRef) continue;
 
-    // Only flag local asset references that look like files (with an extension) and are absent
     if (/\.[a-z0-9]{1,8}$/i.test(cleanRef) && !availableRelPaths.has(cleanRef.toLowerCase())) {
       if (!missing.includes(cleanRef) && missing.length < 20) {
         missing.push(cleanRef);
@@ -245,6 +358,86 @@ function findMissingHtmlAssets(htmlContent: string, availableRelPaths: Set<strin
   }
 
   return missing;
+}
+
+function safelyDecompressEntry(
+  entry: AdmZip.IZipEntry,
+  remainingBudget: number
+): Buffer {
+  const declaredSize = Math.max(0, entry.header.size || 0);
+  if (declaredSize > remainingBudget) {
+    throw new PublishError(
+      `O conteúdo descompactado excede o limite de segurança de ${Math.round(MAX_UNCOMPRESSED_BYTES / 1024 / 1024)} MB.`,
+      400,
+      'UNCOMPRESSED_TOO_LARGE'
+    );
+  }
+
+  const method = entry.header.method;
+  const compressedData = entry.getCompressedData();
+  const compressedSize = compressedData.length;
+
+  let actualData: Buffer;
+  if (method === 0) {
+    // STORED
+    if (compressedData.length > remainingBudget) {
+      throw new PublishError(
+        `O conteúdo descompactado excede o limite de segurança de ${Math.round(MAX_UNCOMPRESSED_BYTES / 1024 / 1024)} MB.`,
+        400,
+        'UNCOMPRESSED_TOO_LARGE'
+      );
+    }
+    actualData = compressedData;
+  } else if (method === 8) {
+    // DEFLATE with strict C++-level maxOutputLength guard against spoofed ZIP bombs
+    try {
+      actualData = zlib.inflateRawSync(compressedData, {
+        maxOutputLength: Math.max(1, remainingBudget),
+      });
+    } catch (err: any) {
+      if (err?.code === 'ERR_BUFFER_TOO_LARGE' || err?.code === 'Z_BUF_ERROR') {
+        throw new PublishError(
+          `ZIP bomb ou tamanho descompactado acima do limite de ${Math.round(MAX_UNCOMPRESSED_BYTES / 1024 / 1024)} MB detectado em "${entry.entryName}".`,
+          400,
+          'ZIP_BOMB_DETECTED'
+        );
+      }
+      throw new PublishError(
+        `Falha ao descompactar arquivo "${entry.entryName}" no ZIP.`,
+        400,
+        'INVALID_ZIP_ENTRY',
+        err?.message
+      );
+    }
+  } else {
+    throw new PublishError(
+      `Método de compressão não suportado (${method}) no arquivo "${entry.entryName}".`,
+      400,
+      'UNSUPPORTED_COMPRESSION'
+    );
+  }
+
+  if (actualData.length > remainingBudget) {
+    throw new PublishError(
+      `O conteúdo descompactado excede o limite de segurança de ${Math.round(MAX_UNCOMPRESSED_BYTES / 1024 / 1024)} MB.`,
+      400,
+      'UNCOMPRESSED_TOO_LARGE'
+    );
+  }
+
+  // Guard against extreme compression ratios (>100x on payloads >= 1 MB)
+  if (actualData.length >= 1024 * 1024) {
+    const ratio = actualData.length / Math.max(1, compressedSize);
+    if (ratio > MAX_COMPRESSION_RATIO) {
+      throw new PublishError(
+        `Taxa de compressão suspeita (${Math.round(ratio)}x) detectada em "${entry.entryName}".`,
+        400,
+        'ZIP_BOMB_DETECTED'
+      );
+    }
+  }
+
+  return actualData;
 }
 
 export function inspectGameZip(zipPath: string, fileSize: number): ZipInspectionResult {
@@ -281,6 +474,7 @@ export function inspectGameZip(zipPath: string, fileSize: number): ZipInspection
       missingAssets: [],
       dangerousFiles: [],
       pathTraversalFiles: [],
+      duplicateFiles: [],
       totalFiles: 0,
       uncompressedSize: 0,
       size: fileSize,
@@ -300,8 +494,10 @@ export function inspectGameZip(zipPath: string, fileSize: number): ZipInspection
 
   const pathTraversalFiles: string[] = [];
   const dangerousFiles: string[] = [];
+  const duplicateFiles: string[] = [];
   const warnings: string[] = [];
-  const validFiles: { cleanPath: string; entry: AdmZip.IZipEntry }[] = [];
+  const seenRawPaths = new Set<string>();
+  const validFiles: { cleanPath: string; entry: AdmZip.IZipEntry; dataSize: number }[] = [];
   let uncompressedSize = 0;
 
   for (const entry of entries) {
@@ -311,8 +507,9 @@ export function inspectGameZip(zipPath: string, fileSize: number): ZipInspection
       continue;
     }
 
-    if (isSymlinkEntry(entry)) {
-      pathTraversalFiles.push(`${entry.entryName} (symlink)`);
+    const specialMode = getSpecialUnixModeReason(entry);
+    if (specialMode) {
+      pathTraversalFiles.push(`${entry.entryName} (${specialMode})`);
       continue;
     }
 
@@ -324,20 +521,24 @@ export function inspectGameZip(zipPath: string, fileSize: number): ZipInspection
       continue;
     }
 
-    uncompressedSize += Math.max(0, entry.header.size || 0);
-    if (uncompressedSize > MAX_UNCOMPRESSED_BYTES) {
-      throw new PublishError(
-        `O conteúdo descompactado excede o limite de segurança de ${Math.round(MAX_UNCOMPRESSED_BYTES / 1024 / 1024)} MB.`,
-        400,
-        'UNCOMPRESSED_TOO_LARGE'
-      );
+    const lowerCleanPath = check.cleanPath.toLowerCase();
+    if (seenRawPaths.has(lowerCleanPath)) {
+      if (!duplicateFiles.includes(check.cleanPath) && duplicateFiles.length < 20) {
+        duplicateFiles.push(check.cleanPath);
+      }
+      continue;
     }
+    seenRawPaths.add(lowerCleanPath);
 
-    if (hasDangerousExtension(check.cleanPath)) {
+    const remainingBudget = MAX_UNCOMPRESSED_BYTES - uncompressedSize;
+    const data = safelyDecompressEntry(entry, remainingBudget);
+    uncompressedSize += data.length;
+
+    if (isDangerousFile(check.cleanPath)) {
       dangerousFiles.push(check.cleanPath);
     }
 
-    validFiles.push({ cleanPath: check.cleanPath, entry });
+    validFiles.push({ cleanPath: check.cleanPath, entry, dataSize: data.length });
   }
 
   if (pathTraversalFiles.length > 0) {
@@ -352,11 +553,34 @@ export function inspectGameZip(zipPath: string, fileSize: number): ZipInspection
       missingAssets: [],
       dangerousFiles: [...dangerousFiles, ...pathTraversalFiles],
       pathTraversalFiles,
+      duplicateFiles,
       totalFiles: entries.length,
       uncompressedSize,
       size: fileSize,
       isApto: false,
       errorMessage: 'Caminhos maliciosos ou links simbólicos detectados no arquivo ZIP.',
+      warnings,
+    };
+  }
+
+  if (duplicateFiles.length > 0) {
+    return {
+      hasIndex: false,
+      hasPackageJson: false,
+      projectType: 'invalid',
+      projectTypeLabel: 'Arquivos Duplicados Detectados',
+      detectedRoot: null,
+      requiresBuild: false,
+      buildScript: null,
+      missingAssets: [],
+      dangerousFiles,
+      pathTraversalFiles,
+      duplicateFiles,
+      totalFiles: validFiles.length,
+      uncompressedSize,
+      size: fileSize,
+      isApto: false,
+      errorMessage: `O ZIP contém arquivos duplicados ou com conflito de maiúsculas/minúsculas: ${duplicateFiles.slice(0, 5).join(', ')}.`,
       warnings,
     };
   }
@@ -370,15 +594,43 @@ export function inspectGameZip(zipPath: string, fileSize: number): ZipInspection
   for (const item of validFiles) {
     const rel = stripRootPrefix(item.cleanPath, detectedRoot);
     if (!rel) continue;
+    const relLower = rel.toLowerCase();
+    if (normalizedLowerSet.has(relLower)) {
+      if (!duplicateFiles.includes(rel) && duplicateFiles.length < 20) {
+        duplicateFiles.push(rel);
+      }
+      continue;
+    }
     normalizedMap.set(rel, item.entry);
-    normalizedLowerSet.add(rel.toLowerCase());
+    normalizedLowerSet.add(relLower);
+  }
+
+  if (duplicateFiles.length > 0) {
+    return {
+      hasIndex: false,
+      hasPackageJson: false,
+      projectType: 'invalid',
+      projectTypeLabel: 'Arquivos Duplicados Detectados',
+      detectedRoot,
+      requiresBuild: false,
+      buildScript: null,
+      missingAssets: [],
+      dangerousFiles,
+      pathTraversalFiles,
+      duplicateFiles,
+      totalFiles: validFiles.length,
+      uncompressedSize,
+      size: fileSize,
+      isApto: false,
+      errorMessage: `O ZIP contém arquivos duplicados após normalização: ${duplicateFiles.slice(0, 5).join(', ')}.`,
+      warnings,
+    };
   }
 
   if (detectedRoot) {
     warnings.push(`Pasta raiz "${detectedRoot}/" será normalizada automaticamente na publicação.`);
   }
 
-  // Locate root index.html and package.json (case-insensitive lookup for safety, exact match preferred)
   const indexEntry =
     normalizedMap.get('index.html') ||
     Array.from(normalizedMap.entries()).find(([k]) => k.toLowerCase() === 'index.html')?.[1];
@@ -395,14 +647,16 @@ export function inspectGameZip(zipPath: string, fileSize: number): ZipInspection
 
   if (pkgEntry) {
     try {
-      parsedPkg = JSON.parse(pkgEntry.getData().toString('utf8'));
+      const pkgBuf = safelyDecompressEntry(pkgEntry, MAX_UNCOMPRESSED_BYTES);
+      parsedPkg = JSON.parse(pkgBuf.toString('utf8'));
       buildScript = typeof parsedPkg?.scripts?.build === 'string' ? parsedPkg.scripts.build.trim() : null;
       const allDeps = {
         ...(parsedPkg?.dependencies || {}),
         ...(parsedPkg?.devDependencies || {}),
       };
       hasBuildDep = BUILD_DEPENDENCY_MARKERS.some((dep) => dep in allDeps);
-    } catch {
+    } catch (err: any) {
+      if (err instanceof PublishError) throw err;
       return {
         hasIndex,
         hasPackageJson: true,
@@ -414,6 +668,7 @@ export function inspectGameZip(zipPath: string, fileSize: number): ZipInspection
         missingAssets: [],
         dangerousFiles,
         pathTraversalFiles,
+        duplicateFiles,
         totalFiles: validFiles.length,
         uncompressedSize,
         size: fileSize,
@@ -430,76 +685,59 @@ export function inspectGameZip(zipPath: string, fileSize: number): ZipInspection
   const hasTsOrJsxSource = Array.from(normalizedLowerSet).some(
     (p) => p.startsWith('src/') && /\.(tsx|ts|jsx|js)$/.test(p)
   );
-  const indexHtmlContent = indexEntry ? indexEntry.getData().toString('utf8') : '';
+  const indexHtmlContent = indexEntry
+    ? safelyDecompressEntry(indexEntry, MAX_INDEX_HTML_BYTES).toString('utf8')
+    : '';
   const htmlUsesSourceEntry = indexEntry ? htmlReferencesSourceModules(indexHtmlContent) : false;
 
   const isBuildProject = Boolean(
     hasPackageJson && (buildScript || hasBuildDep || hasViteConfig || hasTsOrJsxSource || htmlUsesSourceEntry)
   );
 
+  // Security Policy: Never execute npm install or npm run build on uploaded user ZIPs
   if (isBuildProject) {
-    if (!buildScript && !hasViteConfig && !('vite' in { ...(parsedPkg?.dependencies || {}), ...(parsedPkg?.devDependencies || {}) })) {
-      return {
-        hasIndex,
-        hasPackageJson: true,
-        projectType: 'invalid',
-        projectTypeLabel: 'Projeto sem Script de Build',
-        detectedRoot,
-        requiresBuild: true,
-        buildScript: null,
-        missingAssets: [],
-        dangerousFiles,
-        pathTraversalFiles,
-        totalFiles: validFiles.length,
-        uncompressedSize,
-        size: fileSize,
-        isApto: false,
-        errorMessage: 'O projeto possui package.json, mas não define "scripts.build" nem configuração Vite.',
-        warnings,
-      };
-    }
-
-    const isClean = dangerousFiles.length === 0;
     return {
-      hasIndex: hasIndex || true, // Build will produce dist/index.html
+      hasIndex,
       hasPackageJson: true,
       projectType: 'react-vite',
-      projectTypeLabel: 'Projeto React / Vite / TS (Compilação Automática)',
+      projectTypeLabel: 'Projeto React / Vite (Requer Compilação Local)',
       detectedRoot,
       requiresBuild: true,
       buildScript: buildScript || 'vite build',
       missingAssets: [],
       dangerousFiles,
       pathTraversalFiles,
+      duplicateFiles,
       totalFiles: validFiles.length,
       uncompressedSize,
       size: fileSize,
-      isApto: isClean,
-      errorMessage: isClean ? undefined : 'Arquivos executáveis ou scripts perigosos detectados no ZIP.',
+      isApto: false,
+      errorMessage:
+        'Projetos React/Vite que exigem compilação não são compilados no servidor por segurança. Execute "npm run build" localmente e envie apenas o conteúdo compilado (pasta dist/ com index.html) em formato .ZIP.',
       warnings,
     };
   }
 
-  // Otherwise check if it's a ready HTML5 game
   if (hasIndex) {
     if (htmlUsesSourceEntry) {
       return {
         hasIndex: true,
-        hasPackageJson: false,
+        hasPackageJson,
         projectType: 'invalid',
-        projectTypeLabel: 'Código-Fonte sem package.json',
+        projectTypeLabel: 'Código-Fonte Não Compilado',
         detectedRoot,
         requiresBuild: true,
         buildScript: null,
         missingAssets: [],
         dangerousFiles,
         pathTraversalFiles,
+        duplicateFiles,
         totalFiles: validFiles.length,
         uncompressedSize,
         size: fileSize,
         isApto: false,
         errorMessage:
-          'O index.html referencia código-fonte (/src/*.tsx|ts|jsx), mas o ZIP não contém package.json para compilação.',
+          'O index.html referencia código-fonte (/src/*.ts|tsx|jsx) que exige compilação. Compile o projeto localmente ("npm run build") e envie apenas a pasta compilada (dist/) em .ZIP.',
         warnings,
       };
     }
@@ -518,11 +756,14 @@ export function inspectGameZip(zipPath: string, fileSize: number): ZipInspection
       missingAssets,
       dangerousFiles,
       pathTraversalFiles,
+      duplicateFiles,
       totalFiles: validFiles.length,
       uncompressedSize,
       size: fileSize,
       isApto: isClean,
-      errorMessage: isClean ? undefined : 'Arquivos potencialmente perigosos detectados no ZIP.',
+      errorMessage: isClean
+        ? undefined
+        : `Arquivos potencialmente perigosos detectados no ZIP: ${dangerousFiles.slice(0, 5).join(', ')}.`,
       warnings,
     };
   }
@@ -538,14 +779,35 @@ export function inspectGameZip(zipPath: string, fileSize: number): ZipInspection
     missingAssets: [],
     dangerousFiles,
     pathTraversalFiles,
+    duplicateFiles,
     totalFiles: validFiles.length,
     uncompressedSize,
     size: fileSize,
     isApto: false,
     errorMessage:
-      'O ZIP deve conter um arquivo index.html na raiz (jogo HTML5) ou um package.json válido (projeto React/Vite/TS/JS).',
+      'O ZIP deve conter um arquivo index.html na raiz de um jogo HTML5 já compilado e seus recursos.',
     warnings,
   };
+}
+
+function assertNoSymlinkInTargetHierarchy(resolvedRoot: string, destPath: string): void {
+  const rel = path.relative(resolvedRoot, destPath);
+  const parts = rel.split(path.sep).filter(Boolean);
+  let current = resolvedRoot;
+
+  for (let i = 0; i < parts.length - 1; i++) {
+    current = path.join(current, parts[i]);
+    if (fs.existsSync(current)) {
+      const stat = fs.lstatSync(current);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) {
+        throw new PublishError(
+          `Diretório de destino inválido ou symlink detectado: ${parts[i]}`,
+          400,
+          'SYMLINK_BLOCKED'
+        );
+      }
+    }
+  }
 }
 
 export function safeExtractZip(
@@ -567,6 +829,7 @@ export function safeExtractZip(
   const resolvedRoot = path.resolve(targetDir);
   fs.mkdirSync(resolvedRoot, { recursive: true });
 
+  const seenPaths = new Set<string>();
   let extractedFiles = 0;
   let uncompressedBytes = 0;
 
@@ -576,8 +839,13 @@ export function safeExtractZip(
       throw new PublishError(`Caminho bloqueado por segurança: ${entry.entryName}`, 400, 'PATH_TRAVERSAL');
     }
 
-    if (isSymlinkEntry(entry)) {
-      throw new PublishError(`Link simbólico bloqueado por segurança: ${entry.entryName}`, 400, 'SYMLINK_BLOCKED');
+    const specialMode = getSpecialUnixModeReason(entry);
+    if (specialMode) {
+      throw new PublishError(
+        `Entrada bloqueada por segurança (${specialMode}): ${entry.entryName}`,
+        400,
+        'SYMLINK_BLOCKED'
+      );
     }
 
     if (shouldSkipPath(check.cleanPath) || entry.isDirectory) {
@@ -587,7 +855,13 @@ export function safeExtractZip(
     const relPath = stripRootPrefix(check.cleanPath, stripPrefix);
     if (!relPath) continue;
 
-    if (hasDangerousExtension(relPath)) {
+    const lowerRel = relPath.toLowerCase();
+    if (seenPaths.has(lowerRel)) {
+      throw new PublishError(`Arquivo duplicado bloqueado por segurança: ${relPath}`, 400, 'DUPLICATE_FILES');
+    }
+    seenPaths.add(lowerRel);
+
+    if (isDangerousFile(relPath)) {
       throw new PublishError(`Tipo de arquivo proibido: ${relPath}`, 400, 'DANGEROUS_FILE');
     }
 
@@ -596,16 +870,11 @@ export function safeExtractZip(
       throw new PublishError(`Tentativa de escrita fora da pasta isolada: ${relPath}`, 400, 'PATH_TRAVERSAL');
     }
 
-    const data = entry.getData();
+    const remainingBudget = MAX_UNCOMPRESSED_BYTES - uncompressedBytes;
+    const data = safelyDecompressEntry(entry, remainingBudget);
     uncompressedBytes += data.length;
-    if (uncompressedBytes > MAX_UNCOMPRESSED_BYTES) {
-      throw new PublishError(
-        `Conteúdo extraído excedeu o limite de ${Math.round(MAX_UNCOMPRESSED_BYTES / 1024 / 1024)} MB.`,
-        400,
-        'UNCOMPRESSED_TOO_LARGE'
-      );
-    }
 
+    assertNoSymlinkInTargetHierarchy(resolvedRoot, destPath);
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
     fs.writeFileSync(destPath, data);
     extractedFiles++;
@@ -614,108 +883,11 @@ export function safeExtractZip(
   return { extractedFiles, uncompressedBytes };
 }
 
-function runIsolatedCommand(
-  command: string,
-  args: string[],
-  cwd: string,
-  env: NodeJS.ProcessEnv,
-  timeoutMs: number
-): Promise<{ code: number; stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true,
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-
-    const maxLogBytes = 256 * 1024;
-
-    child.stdout?.on('data', (chunk: Buffer) => {
-      if (stdout.length < maxLogBytes) {
-        stdout += chunk.toString('utf8');
-      }
-    });
-
-    child.stderr?.on('data', (chunk: Buffer) => {
-      if (stderr.length < maxLogBytes) {
-        stderr += chunk.toString('utf8');
-      }
-    });
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        if (child.pid) {
-          process.kill(-child.pid, 'SIGTERM');
-        } else {
-          child.kill('SIGTERM');
-        }
-      } catch {
-        // Ignore kill error
-      }
-      setTimeout(() => {
-        try {
-          if (child.pid) {
-            process.kill(-child.pid, 'SIGKILL');
-          } else {
-            child.kill('SIGKILL');
-          }
-        } catch {
-          // Ignore force kill error
-        }
-      }, 2000);
-    }, timeoutMs);
-
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      if (timedOut) {
-        reject(
-          new PublishError(
-            `Tempo limite de execução excedido (${Math.round(timeoutMs / 1000)}s).`,
-            408,
-            'BUILD_TIMEOUT',
-            sanitizeLogOutput(`${stdout}\n${stderr}`, [cwd])
-          )
-        );
-        return;
-      }
-      resolve({ code: code ?? 1, stdout, stderr });
-    });
-  });
-}
-
-function locateBuildOutputDir(projectDir: string): string | null {
-  const candidates = [
-    path.join(projectDir, 'dist'),
-    path.join(projectDir, 'build'),
-    path.join(projectDir, 'out'),
-    path.join(projectDir, 'dist', 'client'),
-    path.join(projectDir, 'public', 'dist'),
-  ];
-
-  for (const dir of candidates) {
-    if (fs.existsSync(dir) && fs.existsSync(path.join(dir, 'index.html'))) {
-      return dir;
-    }
-  }
-  return null;
-}
-
 function rewriteRootRelativeAssetsInIndexHtml(outputDir: string): void {
   const indexPath = path.join(outputDir, 'index.html');
   if (!fs.existsSync(indexPath)) return;
 
-  let html = fs.readFileSync(indexPath, 'utf8');
+  const html = fs.readFileSync(indexPath, 'utf8');
   const updated = html.replace(
     /\b(src|href)=(["'])\/(?!\/)([^"']*)\2/gi,
     (fullMatch, attr, quote, relTarget) => {
@@ -741,177 +913,246 @@ function createZipFromDirectory(sourceDir: string, outZipPath: string): void {
   zip.writeZip(outZipPath);
 }
 
+function getPublicationsDir(backupsDir: string): string {
+  return path.join(backupsDir, 'publications');
+}
+
+function getPublicationFilePath(backupsDir: string, publishId: string): string {
+  if (!isValidPublishId(publishId)) {
+    throw new PublishError('Identificador de publicação inválido.', 400, 'INVALID_PUBLISH_ID');
+  }
+  return path.join(getPublicationsDir(backupsDir), `${publishId}.json`);
+}
+
+function resolveDefaultBackupsDir(baseGamesDir: string): string {
+  return path.join(path.dirname(path.resolve(baseGamesDir)), '.games-backups');
+}
+
+export function savePublicationRecord(backupsDir: string, record: PublicationRecord): void {
+  const pubDir = getPublicationsDir(backupsDir);
+  fs.mkdirSync(pubDir, { recursive: true });
+  const targetPath = getPublicationFilePath(backupsDir, record.publishId);
+  const tmpPath = `${targetPath}.tmp-${crypto.randomBytes(4).toString('hex')}`;
+  fs.writeFileSync(tmpPath, JSON.stringify(record, null, 2), 'utf8');
+  fs.renameSync(tmpPath, targetPath);
+}
+
+export function getPublicationRecord(backupsDir: string, publishId: string): PublicationRecord | null {
+  if (!isValidPublishId(publishId)) return null;
+  const filePath = getPublicationFilePath(backupsDir, publishId);
+  if (!fs.existsSync(filePath)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as PublicationRecord;
+  } catch {
+    return null;
+  }
+}
+
+export function updatePublicationRecord(
+  backupsDir: string,
+  publishId: string,
+  patch: Partial<PublicationRecord>
+): PublicationRecord | null {
+  const existing = getPublicationRecord(backupsDir, publishId);
+  if (!existing) return null;
+  const updated: PublicationRecord = {
+    ...existing,
+    ...patch,
+    publishId: existing.publishId,
+    slug: existing.slug,
+    updatedAt: new Date().toISOString(),
+  };
+  savePublicationRecord(backupsDir, updated);
+  return updated;
+}
+
+export function listPublicationsForSlug(backupsDir: string, slug: string): PublicationRecord[] {
+  if (!isValidSlug(slug)) return [];
+  const pubDir = getPublicationsDir(backupsDir);
+  if (!fs.existsSync(pubDir)) return [];
+
+  const records: PublicationRecord[] = [];
+  for (const fileName of fs.readdirSync(pubDir)) {
+    if (!fileName.endsWith('.json')) continue;
+    try {
+      const rec = JSON.parse(fs.readFileSync(path.join(pubDir, fileName), 'utf8')) as PublicationRecord;
+      if (rec && rec.slug === slug) {
+        records.push(rec);
+      }
+    } catch {
+      // Ignore malformed metadata files
+    }
+  }
+
+  return records.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+export function listBackupsForSlug(backupsDir: string, slug: string): PublicationRecord[] {
+  return listPublicationsForSlug(backupsDir, slug).filter(
+    (rec) => rec.hadPreviousLocal || rec.hadPreviousRemote
+  );
+}
+
+function removeDirectorySafely(dirPath: string | null | undefined): void {
+  if (!dirPath) return;
+  try {
+    if (fs.existsSync(dirPath)) {
+      fs.rmSync(dirPath, { recursive: true, force: true });
+    }
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
+function replaceDirectoryAtomicallyFromCopy(sourceDir: string, targetDir: string, tag: string): void {
+  if (!fs.existsSync(sourceDir) || !fs.existsSync(path.join(sourceDir, 'index.html'))) {
+    throw new PublishError(
+      'Snapshot de backup local ausente ou incompleto para restauração.',
+      500,
+      'INVALID_LOCAL_BACKUP'
+    );
+  }
+
+  const stagingRestore = `${targetDir}.restore-staging-${tag}`;
+  const swapOld = `${targetDir}.restore-old-${tag}`;
+
+  removeDirectorySafely(stagingRestore);
+  removeDirectorySafely(swapOld);
+
+  fs.cpSync(sourceDir, stagingRestore, { recursive: true });
+  fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+
+  const hadCurrent = fs.existsSync(targetDir);
+  if (hadCurrent) {
+    fs.renameSync(targetDir, swapOld);
+  }
+
+  try {
+    fs.renameSync(stagingRestore, targetDir);
+  } catch (err: any) {
+    if (hadCurrent && fs.existsSync(swapOld) && !fs.existsSync(targetDir)) {
+      try {
+        fs.renameSync(swapOld, targetDir);
+      } catch {
+        // Keep best recovery state
+      }
+    }
+    removeDirectorySafely(stagingRestore);
+    throw new PublishError(
+      'Falha ao restaurar arquivos locais do jogo.',
+      500,
+      'LOCAL_RESTORE_FAILED',
+      err?.message
+    );
+  }
+
+  removeDirectorySafely(swapOld);
+}
+
 export async function publishGameZip(options: {
   zipPath: string;
   slug: string;
   baseGamesDir: string;
+  backupsDir?: string;
   fileSize: number;
+  publishId?: string;
+  lockToken?: string;
+  onBeforeLocalCommit?: (context: {
+    slug: string;
+    publishId: string;
+    compiledZipPath: string;
+    stagingDir: string;
+    hadPreviousLocal: boolean;
+    localBackupDir: string | null;
+  }) => Promise<{
+    hadPreviousRemote?: boolean;
+    remoteBackupPath?: string | null;
+    remoteDestination?: string;
+  } | void>;
 }): Promise<PublishResult> {
-  const { zipPath, slug, baseGamesDir, fileSize } = options;
+  const {
+    zipPath,
+    slug,
+    baseGamesDir,
+    backupsDir = resolveDefaultBackupsDir(baseGamesDir),
+    fileSize,
+    publishId: providedPublishId,
+    lockToken,
+    onBeforeLocalCommit,
+  } = options;
 
   if (!isValidSlug(slug)) {
     throw new PublishError('Identificador (slug) do jogo inválido.', 400, 'INVALID_SLUG');
   }
 
-  const inspection = inspectGameZip(zipPath, fileSize);
-  if (!inspection.isApto) {
-    throw new PublishError(
-      inspection.errorMessage || 'O pacote ZIP não atende aos requisitos de publicação.',
-      400,
-      'INVALID_GAME_PACKAGE',
-      inspection.dangerousFiles.length > 0
-        ? `Arquivos bloqueados: ${inspection.dangerousFiles.join(', ')}`
-        : undefined
-    );
+  const publishId = providedPublishId || `pub-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
+  if (!isValidPublishId(publishId)) {
+    throw new PublishError('Identificador de publicação inválido.', 400, 'INVALID_PUBLISH_ID');
   }
 
-  const buildId = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
-  const workspaceDir = path.join('/tmp', `cg-build-${buildId}`);
-  const homeDir = path.join(workspaceDir, 'home');
-  const tmpDir = path.join(workspaceDir, 'tmp');
-  const projectDir = path.join(workspaceDir, 'project');
-  const npmCacheDir = '/tmp/cg-npm-cache';
-  const compiledZipPath = path.join('/tmp', `cg-compiled-${slug}-${buildId}.zip`);
+  const ownsLock = !lockToken || activeSlugLocks.get(slug) !== lockToken;
+  if (ownsLock) {
+    acquireSlugLock(slug, publishId);
+  }
 
-  fs.mkdirSync(homeDir, { recursive: true });
-  fs.mkdirSync(tmpDir, { recursive: true });
-  fs.mkdirSync(projectDir, { recursive: true });
-  fs.mkdirSync(npmCacheDir, { recursive: true });
-
+  const workspaceDir = path.join('/tmp', `cg-publish-${publishId}`);
+  const extractDir = path.join(workspaceDir, 'extracted');
+  const compiledZipPath = path.join('/tmp', `cg-package-${slug}-${publishId}.zip`);
   const targetDir = path.join(baseGamesDir, slug);
-  let buildLogs = '';
+  const stagingDest = `${targetDir}.staging-${publishId}`;
+  const swapOldDir = `${targetDir}.old-${publishId}`;
+  const localBackupDir = path.join(backupsDir, slug, publishId, 'local');
+
+  let committedLocally = false;
+  let hadPreviousLocal = false;
+  let createdLocalBackup = false;
 
   try {
-    // 1. Extract ZIP into isolated temporary workspace
-    safeExtractZip(zipPath, projectDir, inspection.detectedRoot);
+    const inspection = inspectGameZip(zipPath, fileSize);
+    if (!inspection.isApto) {
+      const code =
+        inspection.projectType === 'react-vite' || inspection.requiresBuild
+          ? 'BUILD_REQUIRED_REJECTED'
+          : inspection.duplicateFiles.length > 0
+          ? 'DUPLICATE_FILES'
+          : inspection.pathTraversalFiles.length > 0
+          ? 'PATH_TRAVERSAL'
+          : 'INVALID_GAME_PACKAGE';
 
-    let publishSourceDir = projectDir;
-
-    // 2. If React / Vite / TS / JS project, install dependencies and build in isolation
-    if (inspection.projectType === 'react-vite') {
-      const pkgPath = path.join(projectDir, 'package.json');
-      if (!fs.existsSync(pkgPath)) {
-        throw new PublishError('package.json não encontrado após extração.', 400, 'MISSING_PACKAGE_JSON');
-      }
-
-      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-
-      // Strictly sanitized environment without any server secrets or credentials
-      const installEnv: NodeJS.ProcessEnv = {
-        PATH: process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-        HOME: homeDir,
-        TMPDIR: tmpDir,
-        TEMP: tmpDir,
-        TMP: tmpDir,
-        NODE_ENV: 'development', // Ensure devDependencies (vite, typescript) are installed
-        CI: 'true',
-        NO_UPDATE_NOTIFIER: '1',
-        npm_config_cache: npmCacheDir,
-        npm_config_audit: 'false',
-        npm_config_fund: 'false',
-        npm_config_update_notifier: 'false',
-        npm_config_loglevel: 'error',
-      };
-
-      const buildEnv: NodeJS.ProcessEnv = {
-        ...installEnv,
-        NODE_ENV: 'production',
-        PUBLIC_URL: '.',
-      };
-
-      // Step 2a: Install dependencies safely (--ignore-scripts prevents arbitrary postinstall code execution)
-      let installRes = await runIsolatedCommand(
-        'npm',
-        ['install', '--include=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline'],
-        projectDir,
-        installEnv,
-        INSTALL_TIMEOUT_MS
+      throw new PublishError(
+        inspection.errorMessage || 'O pacote ZIP não atende aos requisitos de publicação.',
+        400,
+        code,
+        inspection.dangerousFiles.length > 0
+          ? `Arquivos bloqueados: ${inspection.dangerousFiles.join(', ')}`
+          : undefined
       );
-
-      if (installRes.code !== 0 && `${installRes.stdout}\n${installRes.stderr}`.includes('ERESOLVE')) {
-        installRes = await runIsolatedCommand(
-          'npm',
-          [
-            'install',
-            '--include=dev',
-            '--ignore-scripts',
-            '--no-audit',
-            '--no-fund',
-            '--legacy-peer-deps',
-          ],
-          projectDir,
-          installEnv,
-          INSTALL_TIMEOUT_MS
-        );
-      }
-
-      if (installRes.code !== 0) {
-        const sanitized = sanitizeLogOutput(`${installRes.stdout}\n${installRes.stderr}`, [workspaceDir, projectDir]);
-        throw new PublishError(
-          'Falha ao instalar as dependências do projeto (npm install).',
-          400,
-          'NPM_INSTALL_FAILED',
-          sanitized
-        );
-      }
-
-      // Step 2b: Execute build
-      const buildScript = typeof pkg?.scripts?.build === 'string' ? pkg.scripts.build.trim() : '';
-      let buildRes: { code: number; stdout: string; stderr: string };
-
-      if (buildScript) {
-        const endsWithViteBuild = /(?:^|&&|\|\||;)\s*(?:npx\s+)?vite\s+build\s*$/i.test(buildScript);
-        const args = endsWithViteBuild
-          ? ['run', 'build', '--ignore-scripts', '--', '--base=./']
-          : ['run', 'build', '--ignore-scripts'];
-
-        buildRes = await runIsolatedCommand('npm', args, projectDir, buildEnv, BUILD_TIMEOUT_MS);
-      } else {
-        const localViteBin = path.join(projectDir, 'node_modules', '.bin', 'vite');
-        if (fs.existsSync(localViteBin)) {
-          buildRes = await runIsolatedCommand(
-            localViteBin,
-            ['build', '--base=./'],
-            projectDir,
-            buildEnv,
-            BUILD_TIMEOUT_MS
-          );
-        } else {
-          throw new PublishError(
-            'Script "build" não encontrado no package.json.',
-            400,
-            'MISSING_BUILD_SCRIPT'
-          );
-        }
-      }
-
-      buildLogs = sanitizeLogOutput(`${buildRes.stdout}\n${buildRes.stderr}`, [workspaceDir, projectDir]);
-
-      if (buildRes.code !== 0) {
-        throw new PublishError(
-          'Erro ao compilar o projeto (npm run build). Verifique o código do jogo e tente novamente.',
-          400,
-          'BUILD_FAILED',
-          buildLogs
-        );
-      }
-
-      // Step 2c: Locate output folder (dist, build, out...)
-      const outputDir = locateBuildOutputDir(projectDir);
-      if (!outputDir) {
-        throw new PublishError(
-          'Compilação finalizada, mas não foi encontrada uma pasta de saída (dist/build/out) com index.html.',
-          400,
-          'MISSING_DIST_INDEX',
-          buildLogs
-        );
-      }
-
-      publishSourceDir = outputDir;
     }
 
-    // 3. Verify final index.html exists at root of publishable folder
-    const finalIndexPath = path.join(publishSourceDir, 'index.html');
+    fs.mkdirSync(extractDir, { recursive: true });
+    fs.mkdirSync(baseGamesDir, { recursive: true });
+    fs.mkdirSync(backupsDir, { recursive: true });
+
+    const now = new Date().toISOString();
+    savePublicationRecord(backupsDir, {
+      publishId,
+      slug,
+      state: 'processing',
+      createdAt: now,
+      updatedAt: now,
+      hadPreviousLocal: false,
+      hadPreviousRemote: false,
+      localBackupDir: null,
+      remoteBackupPath: null,
+      remoteDestination: `games/${slug}.zip`,
+      iframeUrl: `/games/${slug}/index.html`,
+    });
+
+    // 1. Extract validated HTML5 ZIP into isolated temporary directory
+    safeExtractZip(zipPath, extractDir, inspection.detectedRoot);
+
+    // 2. Verify final index.html exists at root
+    const finalIndexPath = path.join(extractDir, 'index.html');
     if (!fs.existsSync(finalIndexPath)) {
       throw new PublishError(
         'O pacote final não contém index.html na raiz.',
@@ -920,43 +1161,383 @@ export async function publishGameZip(options: {
       );
     }
 
-    // 4. Normalize root-relative asset paths (/assets/...) for subpath iframe serving (/games/<slug>/)
-    rewriteRootRelativeAssetsInIndexHtml(publishSourceDir);
+    // 3. Normalize root-relative asset paths (/assets/...) for subpath iframe serving (/games/<slug>/)
+    rewriteRootRelativeAssetsInIndexHtml(extractDir);
 
-    // 5. Create clean compiled ZIP for Firebase Storage persistence
-    createZipFromDirectory(publishSourceDir, compiledZipPath);
+    // 4. Create clean normalized ZIP for Firebase Storage persistence
+    createZipFromDirectory(extractDir, compiledZipPath);
 
-    // 6. Publish atomically to targetDir
-    const stagingDest = `${targetDir}.staging-${buildId}`;
-    if (fs.existsSync(stagingDest)) {
-      fs.rmSync(stagingDest, { recursive: true, force: true });
+    // 5. Prepare local staging directory without touching any existing published version yet
+    removeDirectorySafely(stagingDest);
+    fs.cpSync(extractDir, stagingDest, { recursive: true });
+
+    // 6. Preserve existing local version in dedicated backup directory BEFORE touching targetDir or Storage
+    hadPreviousLocal = fs.existsSync(targetDir) && fs.existsSync(path.join(targetDir, 'index.html'));
+    if (hadPreviousLocal) {
+      try {
+        removeDirectorySafely(localBackupDir);
+        fs.mkdirSync(path.dirname(localBackupDir), { recursive: true });
+        fs.cpSync(targetDir, localBackupDir, { recursive: true });
+        if (!fs.existsSync(path.join(localBackupDir, 'index.html'))) {
+          throw new Error('Backup local gerado sem index.html.');
+        }
+        createdLocalBackup = true;
+      } catch (backupErr: any) {
+        throw new PublishError(
+          'Falha ao criar backup local da versão anterior. Nenhuma alteração foi aplicada.',
+          500,
+          'LOCAL_BACKUP_FAILED',
+          backupErr?.message
+        );
+      }
     }
-    fs.cpSync(publishSourceDir, stagingDest, { recursive: true });
 
-    if (fs.existsSync(targetDir)) {
-      fs.rmSync(targetDir, { recursive: true, force: true });
+    updatePublicationRecord(backupsDir, publishId, {
+      state: 'backup_created',
+      hadPreviousLocal,
+      localBackupDir: createdLocalBackup ? localBackupDir : null,
+    });
+
+    // 7. Execute mandatory pre-commit hook (e.g., remote backup + Storage upload) BEFORE overwriting targetDir
+    let remoteMeta: {
+      hadPreviousRemote?: boolean;
+      remoteBackupPath?: string | null;
+      remoteDestination?: string;
+    } = {};
+
+    if (onBeforeLocalCommit) {
+      const hookRes = await onBeforeLocalCommit({
+        slug,
+        publishId,
+        compiledZipPath,
+        stagingDir: stagingDest,
+        hadPreviousLocal,
+        localBackupDir: createdLocalBackup ? localBackupDir : null,
+      });
+      if (hookRes && typeof hookRes === 'object') {
+        remoteMeta = hookRes;
+      }
     }
-    fs.mkdirSync(path.dirname(targetDir), { recursive: true });
-    fs.renameSync(stagingDest, targetDir);
+
+    // 8. Safe atomic replacement with rollback to previous version if local swap fails
+    const hadAnyTargetDir = fs.existsSync(targetDir);
+    if (hadAnyTargetDir) {
+      removeDirectorySafely(swapOldDir);
+      fs.renameSync(targetDir, swapOldDir);
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(targetDir), { recursive: true });
+      fs.renameSync(stagingDest, targetDir);
+      committedLocally = true;
+    } catch (swapErr: any) {
+      // Roll back previous published version if local replacement failed
+      if (hadAnyTargetDir && fs.existsSync(swapOldDir) && !fs.existsSync(targetDir)) {
+        try {
+          fs.renameSync(swapOldDir, targetDir);
+        } catch (rollbackErr) {
+          console.error('[Publisher] Falha ao restaurar versão anterior após erro no commit:', rollbackErr);
+        }
+      } else if (createdLocalBackup && !fs.existsSync(targetDir)) {
+        try {
+          replaceDirectoryAtomicallyFromCopy(localBackupDir, targetDir, publishId);
+        } catch (rollbackErr) {
+          console.error('[Publisher] Falha ao restaurar backup local após erro no commit:', rollbackErr);
+        }
+      }
+      throw new PublishError(
+        'Falha ao substituir os arquivos do jogo publicado; versão anterior preservada.',
+        500,
+        'LOCAL_COMMIT_FAILED',
+        swapErr?.message
+      );
+    }
+
+    // Remove only the transient swap folder; the preserved backup in localBackupDir is KEPT
+    // until safe Firestore confirmation and controlled retention cleanup!
+    removeDirectorySafely(swapOldDir);
+
+    updatePublicationRecord(backupsDir, publishId, {
+      state: 'awaiting_firestore_confirmation',
+      hadPreviousLocal,
+      localBackupDir: createdLocalBackup ? localBackupDir : null,
+      hadPreviousRemote: Boolean(remoteMeta.hadPreviousRemote),
+      remoteBackupPath: remoteMeta.remoteBackupPath ?? null,
+      remoteDestination: remoteMeta.remoteDestination ?? `games/${slug}.zip`,
+    });
 
     return {
+      publishId,
+      state: 'awaiting_firestore_confirmation',
       slug,
       iframeUrl: `/games/${slug}/index.html`,
       projectType: inspection.projectType,
       projectTypeLabel: inspection.projectTypeLabel,
-      compiled: inspection.projectType === 'react-vite',
+      compiled: false,
       compiledZipPath,
-      buildLogs: buildLogs || undefined,
+      hadPreviousLocal,
+      localBackupDir: createdLocalBackup ? localBackupDir : null,
       warnings: inspection.warnings,
     };
-  } finally {
-    // Always remove temporary isolated build workspace
-    try {
-      if (fs.existsSync(workspaceDir)) {
-        fs.rmSync(workspaceDir, { recursive: true, force: true });
+  } catch (err: any) {
+    if (!committedLocally) {
+      removeDirectorySafely(stagingDest);
+      if (fs.existsSync(compiledZipPath)) {
+        try {
+          fs.unlinkSync(compiledZipPath);
+        } catch {
+          // Ignore temp zip cleanup failure
+        }
       }
-    } catch (cleanupErr) {
-      console.warn('[Publisher] Falha ao limpar workspace temporário:', cleanupErr);
     }
+
+    if (fs.existsSync(backupsDir) && getPublicationRecord(backupsDir, publishId)) {
+      updatePublicationRecord(backupsDir, publishId, {
+        state: 'failed',
+        failureReason: err?.message || 'Erro durante a publicação.',
+      });
+    }
+    throw err;
+  } finally {
+    if (ownsLock) {
+      releaseSlugLock(slug, publishId);
+    }
+    removeDirectorySafely(workspaceDir);
   }
+}
+
+export async function confirmPublication(options: {
+  backupsDir: string;
+  publishId: string;
+  firestoreDocId?: string;
+  retainCount?: number;
+  onDeleteRemoteBackup?: (remoteBackupPath: string) => Promise<void>;
+}): Promise<{
+  record: PublicationRecord;
+  prunedCount: number;
+}> {
+  const {
+    backupsDir,
+    publishId,
+    firestoreDocId,
+    retainCount = DEFAULT_RETAINED_BACKUPS,
+    onDeleteRemoteBackup,
+  } = options;
+
+  const existing = getPublicationRecord(backupsDir, publishId);
+  if (!existing) {
+    throw new PublishError('Registro de publicação não encontrado.', 404, 'PUBLICATION_NOT_FOUND');
+  }
+
+  if (existing.state === 'rolled_back' || existing.state === 'failed') {
+    throw new PublishError(
+      'Esta publicação já foi revertida ou falhou e não pode ser confirmada.',
+      409,
+      'PUBLICATION_NOT_CONFIRMABLE'
+    );
+  }
+
+  const confirmedRecord =
+    existing.state === 'confirmed'
+      ? existing
+      : updatePublicationRecord(backupsDir, publishId, {
+          state: 'confirmed',
+          confirmedAt: new Date().toISOString(),
+          firestoreDocId: firestoreDocId || existing.firestoreDocId,
+        })!;
+
+  // Controlled retention cleanup:
+  // - Never delete backups of active/unconfirmed/awaiting_firestore_confirmation/processing publications.
+  // - Keep the latest `retainCount` confirmed backups for recovery.
+  const safeRetain = Math.max(1, retainCount);
+  const allForSlug = listPublicationsForSlug(backupsDir, confirmedRecord.slug);
+  const confirmedWithBackup = allForSlug.filter(
+    (rec) => rec.state === 'confirmed' && (rec.localBackupDir || rec.remoteBackupPath)
+  );
+
+  let prunedCount = 0;
+  const toPrune = confirmedWithBackup.slice(safeRetain);
+
+  for (const oldRec of toPrune) {
+    if (oldRec.publishId === publishId) continue;
+    if (oldRec.remoteBackupPath && onDeleteRemoteBackup) {
+      try {
+        await onDeleteRemoteBackup(oldRec.remoteBackupPath);
+      } catch (err: any) {
+        console.warn(`[Backups] Falha controlada ao limpar backup remoto ${oldRec.remoteBackupPath}:`, err?.message || err);
+        continue; // Do not erase local metadata if remote cleanup failed
+      }
+    }
+    if (oldRec.localBackupDir) {
+      removeDirectorySafely(path.dirname(oldRec.localBackupDir));
+    }
+    updatePublicationRecord(backupsDir, oldRec.publishId, {
+      localBackupDir: null,
+      remoteBackupPath: null,
+    });
+    prunedCount++;
+  }
+
+  return { record: confirmedRecord, prunedCount };
+}
+
+export async function rollbackPublication(options: {
+  backupsDir: string;
+  baseGamesDir: string;
+  publishId: string;
+  reason?: string;
+  lockToken?: string;
+  onRestoreRemote?: (context: {
+    slug: string;
+    publishId: string;
+    hadPreviousRemote: boolean;
+    remoteBackupPath: string | null;
+    remoteDestination: string;
+  }) => Promise<void>;
+}): Promise<{
+  record: PublicationRecord;
+  restoredLocal: boolean;
+  restoredRemote: boolean;
+}> {
+  const { backupsDir, baseGamesDir, publishId, reason, lockToken, onRestoreRemote } = options;
+
+  const existing = getPublicationRecord(backupsDir, publishId);
+  if (!existing) {
+    throw new PublishError('Registro de publicação não encontrado para rollback.', 404, 'PUBLICATION_NOT_FOUND');
+  }
+
+  const execute = async () => {
+    const current = getPublicationRecord(backupsDir, publishId) || existing;
+    if (current.state === 'rolled_back') {
+      return {
+        record: current,
+        restoredLocal: current.hadPreviousLocal,
+        restoredRemote: current.hadPreviousRemote,
+      };
+    }
+
+    const targetDir = path.join(baseGamesDir, current.slug);
+    let restoredLocal = false;
+    let restoredRemote = false;
+
+    if (current.hadPreviousLocal) {
+      if (!current.localBackupDir || !fs.existsSync(path.join(current.localBackupDir, 'index.html'))) {
+        throw new PublishError(
+          'Backup local da versão anterior não encontrado para restauração.',
+          404,
+          'LOCAL_BACKUP_MISSING'
+        );
+      }
+      replaceDirectoryAtomicallyFromCopy(current.localBackupDir, targetDir, `rb-${publishId}`);
+      restoredLocal = true;
+    } else {
+      // Brand new game whose publication was rolled back: remove unconfirmed local directory
+      removeDirectorySafely(targetDir);
+    }
+
+    if (onRestoreRemote) {
+      await onRestoreRemote({
+        slug: current.slug,
+        publishId: current.publishId,
+        hadPreviousRemote: current.hadPreviousRemote,
+        remoteBackupPath: current.remoteBackupPath,
+        remoteDestination: current.remoteDestination,
+      });
+      restoredRemote = current.hadPreviousRemote;
+    }
+
+    const updated = updatePublicationRecord(backupsDir, publishId, {
+      state: 'rolled_back',
+      rolledBackAt: new Date().toISOString(),
+      failureReason: reason || current.failureReason || 'Rollback executado.',
+    })!;
+
+    return { record: updated, restoredLocal, restoredRemote };
+  };
+
+  const opId = `rb-${publishId}`;
+  const ownsLock = !lockToken || activeSlugLocks.get(existing.slug) !== lockToken;
+  if (ownsLock) {
+    return withSlugLock(existing.slug, opId, execute);
+  }
+  return execute();
+}
+
+export async function restoreLatestGameBackup(options: {
+  backupsDir: string;
+  baseGamesDir: string;
+  slug: string;
+  publishId?: string;
+  onRestoreRemote?: (context: {
+    slug: string;
+    publishId: string;
+    hadPreviousRemote: boolean;
+    remoteBackupPath: string | null;
+    remoteDestination: string;
+  }) => Promise<void>;
+}): Promise<{
+  record: PublicationRecord;
+  restoredLocal: boolean;
+  restoredRemote: boolean;
+}> {
+  const { backupsDir, baseGamesDir, slug, publishId, onRestoreRemote } = options;
+
+  if (!isValidSlug(slug)) {
+    throw new PublishError('Identificador (slug) do jogo inválido.', 400, 'INVALID_SLUG');
+  }
+
+  let candidate: PublicationRecord | null = null;
+  if (publishId) {
+    candidate = getPublicationRecord(backupsDir, publishId);
+    if (!candidate || candidate.slug !== slug) {
+      throw new PublishError('Backup especificado não encontrado para este jogo.', 404, 'BACKUP_NOT_FOUND');
+    }
+  } else {
+    const backups = listBackupsForSlug(backupsDir, slug);
+    candidate =
+      backups.find(
+        (b) =>
+          (b.localBackupDir && fs.existsSync(path.join(b.localBackupDir, 'index.html'))) ||
+          b.remoteBackupPath
+      ) || null;
+  }
+
+  if (!candidate) {
+    throw new PublishError(
+      `Nenhum backup recuperável encontrado para "${slug}".`,
+      404,
+      'BACKUP_NOT_FOUND'
+    );
+  }
+
+  const opId = `restore-${candidate.publishId}`;
+  return withSlugLock(slug, opId, async () => {
+    const targetDir = path.join(baseGamesDir, slug);
+    let restoredLocal = false;
+    let restoredRemote = false;
+
+    if (candidate!.localBackupDir && fs.existsSync(path.join(candidate!.localBackupDir, 'index.html'))) {
+      replaceDirectoryAtomicallyFromCopy(candidate!.localBackupDir, targetDir, `rest-${Date.now()}`);
+      restoredLocal = true;
+    }
+
+    if (onRestoreRemote && candidate!.remoteBackupPath) {
+      await onRestoreRemote({
+        slug,
+        publishId: candidate!.publishId,
+        hadPreviousRemote: true,
+        remoteBackupPath: candidate!.remoteBackupPath,
+        remoteDestination: candidate!.remoteDestination,
+      });
+      restoredRemote = true;
+    }
+
+    const updated = updatePublicationRecord(backupsDir, candidate!.publishId, {
+      state: 'rolled_back',
+      rolledBackAt: new Date().toISOString(),
+      failureReason: 'Restauração manual da versão anterior.',
+    })!;
+
+    return { record: updated, restoredLocal, restoredRemote };
+  });
 }

@@ -250,7 +250,6 @@ export class AnalyticsService {
       await setDoc(gameStatsRef, {
         racesCompleted: increment(1),
         lastUpdated: serverTimestamp(),
-        ...params.score && { totalScore: increment(params.score) }
       }, { merge: true });
     } catch (e) {
       // Falha não crítica
@@ -283,11 +282,15 @@ export class AnalyticsService {
     await this.trackEvent('desk_racer_lap_complete', eventData);
     logFirebaseEvent('desk_racer_lap_complete', eventData);
 
-    const gameStatsRef = doc(db, 'game_stats', 'desk_racer');
-    await setDoc(gameStatsRef, {
-      lapsCompleted: increment(1),
-      lastUpdated: serverTimestamp()
-    }, { merge: true });
+    try {
+      const gameStatsRef = doc(db, 'game_stats', 'desk_racer');
+      await setDoc(gameStatsRef, {
+        lapsCompleted: increment(1),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+    } catch {
+      // Falha não crítica
+    }
   }
 
   static async trackDeskRacerRaceFinish(params: { totalTime: number; bestLap: number }) {
@@ -303,11 +306,15 @@ export class AnalyticsService {
     await this.trackEvent('desk_racer_replay', eventData);
     logFirebaseEvent('desk_racer_replay', eventData);
 
-    const gameStatsRef = doc(db, 'game_stats', 'desk_racer');
-    await setDoc(gameStatsRef, {
-      replaysCount: increment(1),
-      lastUpdated: serverTimestamp()
-    }, { merge: true });
+    try {
+      const gameStatsRef = doc(db, 'game_stats', 'desk_racer');
+      await setDoc(gameStatsRef, {
+        replaysCount: increment(1),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+    } catch {
+      // Falha não crítica
+    }
   }
 
   static async trackDeskRacerCameraSwitch(cameraIndex: string | number) {
@@ -316,11 +323,15 @@ export class AnalyticsService {
     await this.trackEvent('desk_racer_camera_switch', eventData);
     logFirebaseEvent('desk_racer_camera_switch', eventData);
 
-    const gameStatsRef = doc(db, 'game_stats', 'desk_racer');
-    await setDoc(gameStatsRef, {
-      [`camera_${camKey}`]: increment(1),
-      lastUpdated: serverTimestamp()
-    }, { merge: true });
+    try {
+      const gameStatsRef = doc(db, 'game_stats', 'desk_racer');
+      await setDoc(gameStatsRef, {
+        [`camera_${camKey}`]: increment(1),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+    } catch {
+      // Falha não crítica
+    }
   }
 
   static async trackDeskRacerSoundToggle(soundEnabled: boolean) {
@@ -335,6 +346,28 @@ export class AnalyticsService {
     logFirebaseEvent('desk_racer_pause_toggle', eventData);
   }
 
+  static async trackGameHeartbeat(gameId: string, secondsElapsed: number) {
+    const cleanId = (gameId || 'game').replace(/[^a-zA-Z0-9_\-]/g, '_').slice(0, 64);
+    const retention = this.getRetentionCohort();
+    const eventData = {
+      gameId: cleanId,
+      secondsElapsed,
+      cohort: retention.cohort
+    };
+    await this.trackEvent('game_retention_heartbeat', eventData);
+    logFirebaseEvent('game_retention_heartbeat', eventData);
+
+    try {
+      const gameStatsRef = doc(db, 'game_stats', cleanId);
+      await setDoc(gameStatsRef, {
+        totalDwellSeconds: increment(secondsElapsed),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+    } catch {
+      // Falha não crítica
+    }
+  }
+
   static async trackDeskRacerHeartbeat(secondsElapsed: number) {
     const retention = this.getRetentionCohort();
     const eventData = {
@@ -345,11 +378,15 @@ export class AnalyticsService {
     await this.trackEvent('desk_racer_retention_heartbeat', eventData);
     logFirebaseEvent('desk_racer_retention_heartbeat', eventData);
 
-    const gameStatsRef = doc(db, 'game_stats', 'desk_racer');
-    await setDoc(gameStatsRef, {
-      totalDwellSeconds: increment(secondsElapsed),
-      lastUpdated: serverTimestamp()
-    }, { merge: true });
+    try {
+      const gameStatsRef = doc(db, 'game_stats', 'desk_racer');
+      await setDoc(gameStatsRef, {
+        totalDwellSeconds: increment(secondsElapsed),
+        lastUpdated: serverTimestamp()
+      }, { merge: true });
+    } catch {
+      // Falha não crítica
+    }
   }
 
   static async trackDeskRacerSessionEnd(params: { durationSeconds: number; lapsCount?: number; completedRace?: boolean }) {

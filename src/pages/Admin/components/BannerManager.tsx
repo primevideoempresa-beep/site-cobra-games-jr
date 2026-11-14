@@ -50,6 +50,18 @@ interface Banner {
   order: number;
 }
 
+const MAX_INLINE_IMAGE_BYTES = 700 * 1024;
+
+function validateInlineImageFile(file: File): string | null {
+  if (!file.type.startsWith('image/')) {
+    return 'Selecione um arquivo de imagem válido (PNG, JPG, WebP, SVG).';
+  }
+  if (file.size > MAX_INLINE_IMAGE_BYTES) {
+    return 'A imagem excede o limite de 700 KB para salvamento direto. Reduza o tamanho ou informe uma URL externa.';
+  }
+  return null;
+}
+
 export const BannerManager = () => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,15 +136,19 @@ export const BannerManager = () => {
 
     setIsSaving(true);
     try {
+      const { id: _ignoredId, ...bannerFields } = formData;
+      const cleanPayload = Object.fromEntries(
+        Object.entries(bannerFields).filter(([, value]) => value !== undefined)
+      );
       if (editingBanner) {
         await updateDoc(doc(db, 'banners', editingBanner.id), {
-          ...formData,
+          ...cleanPayload,
           updatedAt: serverTimestamp()
         });
         toast.success('Banner atualizado com sucesso');
       } else {
         await addDoc(collection(db, 'banners'), {
-          ...formData,
+          ...cleanPayload,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
@@ -149,7 +165,12 @@ export const BannerManager = () => {
 
   const handleQuickUpload = async (id: string, file?: File) => {
     if (!file) return;
-    
+    const validationError = validateInlineImageFile(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
@@ -230,7 +251,11 @@ export const BannerManager = () => {
                 type="file" 
                 accept="image/*" 
                 className="hidden" 
-                onChange={(e) => handleQuickUpload(banner.id, e.target.files?.[0])}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  handleQuickUpload(banner.id, file);
+                }}
               />
 
               <div className="absolute top-4 left-4 flex gap-2">
@@ -401,10 +426,16 @@ export const BannerManager = () => {
                           className="hidden" 
                           onChange={(e) => {
                             const file = e.target.files?.[0];
+                            e.target.value = '';
                             if (file) {
+                              const validationError = validateInlineImageFile(file);
+                              if (validationError) {
+                                toast.error(validationError);
+                                return;
+                              }
                               const reader = new FileReader();
                               reader.onloadend = () => {
-                                setFormData({ ...formData, imageUrl: reader.result as string });
+                                setFormData((prev) => ({ ...prev, imageUrl: reader.result as string }));
                                 toast.success('Imagem carregada com sucesso');
                               };
                               reader.readAsDataURL(file);

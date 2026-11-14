@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "start": "NODE_ENV=production node dist/server.js",
-    "build": "vite build && tsc server.ts --esModuleInterop --module esnext --target esnext --outDir dist --moduleResolution node --allowJs --skipLibCheck",
-    "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "start": "NODE_ENV=production node server-dist/server.js",
+    "build:server": "tsc -p tsconfig.server.json",
+    "typecheck:backend": "tsc -p tsconfig.server.json --noEmit",
+    "build": "tsc --noEmit && vite build && npm run build:server",
+    "clean": "rm -rf dist server-dist",
+    "lint": "tsc --noEmit && npm run typecheck:backend"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.21.0",

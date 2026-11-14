@@ -1,47 +1,56 @@
 import React, { useState } from 'react';
-import { Database, Download, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import { collection, addDoc, getDocs, query, limit, serverTimestamp } from 'firebase/firestore';
+import { Database, Download, CheckCircle2, AlertCircle, Loader2, AlertTriangle } from 'lucide-react';
+import { collection, addDoc, doc, setDoc, getDocs, query, limit, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import { otherGames } from '../../../data';
 import { toast } from 'sonner';
 
 export const SeedUtility = () => {
   const [isSeeding, setIsSeeding] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
+  const [confirmStep, setConfirmStep] = useState<'initial' | 'existing' | null>(null);
   const [results, setResults] = useState<{ success: boolean; message: string } | null>(null);
 
-  const seedData = async () => {
-    if (!window.confirm('Isso irá importar os dados estáticos atuais para o Firestore. Continuar?')) return;
-    
+  const requestSeedConfirmation = async () => {
+    setResults(null);
+    setIsChecking(true);
+    try {
+      const gamesSnap = await getDocs(query(collection(db, 'games'), limit(1)));
+      setConfirmStep(gamesSnap.empty ? 'initial' : 'existing');
+    } catch (err: any) {
+      console.error('Error checking catalog before seed:', err);
+      toast.error('Erro ao verificar catálogo no Firestore');
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const executeSeedData = async () => {
+    setConfirmStep(null);
     setIsSeeding(true);
     setResults(null);
-    
-    try {
-      // 1. Check if already seeded (prevent duplicates easily)
-      const gamesSnap = await getDocs(query(collection(db, 'games'), limit(1)));
-      if (!gamesSnap.empty) {
-        const proceed = window.confirm('O catálogo já contém dados. Deseja importar os dados estáticos mesmo assim (pode gerar duplicatas)?');
-        if (!proceed) {
-          setIsSeeding(false);
-          return;
-        }
-      }
 
-      // 2. Seed Games
-      console.log('Seeding games...');
+    try {
+      // Seed Games preserving canonical IDs from src/data.ts
       let gamesCount = 0;
       for (const game of otherGames) {
-        await addDoc(collection(db, 'games'), {
-          ...game,
+        const { id: gameId, ...gameFields } = game;
+        const payload = {
+          ...gameFields,
           order: gamesCount,
           active: true,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
-        });
+        };
+        if (gameId) {
+          await setDoc(doc(db, 'games', gameId), payload, { merge: true });
+        } else {
+          await addDoc(collection(db, 'games'), payload);
+        }
         gamesCount++;
       }
 
-      // 3. Seed Banners (Static from BannerCarousel logic)
-      console.log('Seeding banners...');
+      // Seed Banners (Static from BannerCarousel logic)
       const defaultBanners = [
         {
           badge: 'LANÇAMENTOS',
@@ -137,24 +146,54 @@ export const SeedUtility = () => {
         </div>
       )}
 
-      <button 
-        type="button"
-        onClick={seedData}
-        disabled={isSeeding}
-        className="w-full bg-white hover:bg-zinc-100 disabled:opacity-50 text-black font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-95"
-      >
-        {isSeeding ? (
-          <span key="seeding" className="inline-flex items-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            <span>Migrando Dados...</span>
-          </span>
-        ) : (
-          <span key="seed-idle" className="inline-flex items-center gap-2">
-            <Database className="w-5 h-5" />
-            <span>Iniciar Sincronização</span>
-          </span>
-        )}
-      </button>
+      {confirmStep ? (
+        <div className="p-5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-100 font-medium">
+              {confirmStep === 'existing'
+                ? 'O catálogo já contém jogos no Firestore. Deseja sincronizar os jogos estáticos e adicionar os banners iniciais mesmo assim?'
+                : 'Isso irá importar os dados estáticos iniciais para o Firestore. Deseja continuar?'}
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={executeSeedData}
+              disabled={isSeeding}
+              className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white font-black py-3 rounded-xl transition-all"
+            >
+              Confirmar Sincronização
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmStep(null)}
+              className="px-6 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold py-3 rounded-xl transition-all"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button 
+          type="button"
+          onClick={requestSeedConfirmation}
+          disabled={isSeeding || isChecking}
+          className="w-full bg-white hover:bg-zinc-100 disabled:opacity-50 text-black font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 active:scale-95"
+        >
+          {isSeeding || isChecking ? (
+            <span key="seeding" className="inline-flex items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>{isChecking ? 'Verificando Catálogo...' : 'Migrando Dados...'}</span>
+            </span>
+          ) : (
+            <span key="seed-idle" className="inline-flex items-center gap-2">
+              <Database className="w-5 h-5" />
+              <span>Iniciar Sincronização</span>
+            </span>
+          )}
+        </button>
+      )}
 
       <p className="text-[10px] text-zinc-600 mt-4 text-center leading-relaxed">
         AVISO: Execute esta ação apenas uma vez para popular o banco inicial.<br />

@@ -29,6 +29,11 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { db, auth } from '../../../lib/firebase';
+import {
+  buildPublisherApiUrl,
+  isSameOriginStaticFallbackLikely,
+  PublisherConfigError,
+} from '../../../lib/publisherApi';
 import { LoggerService } from '../../../services/logger';
 import { toast } from 'sonner';
 import { clsx, type ClassValue } from 'clsx';
@@ -39,6 +44,17 @@ function cn(...inputs: ClassValue[]) {
 }
 
 const MAX_ZIP_BYTES = 100 * 1024 * 1024;
+const MAX_INLINE_IMAGE_BYTES = 700 * 1024; // ~700 KB raw (~935 KB base64) to stay safely under Firestore's 1 MB doc limit
+
+function validateInlineImageFile(file: File): string | null {
+  if (!file.type.startsWith('image/')) {
+    return 'Selecione um arquivo de imagem válido (PNG, JPG, WebP, SVG).';
+  }
+  if (file.size > MAX_INLINE_IMAGE_BYTES) {
+    return 'A imagem excede o limite de 700 KB para salvamento direto. Reduza o tamanho ou informe uma URL externa.';
+  }
+  return null;
+}
 
 class PublishClientError extends Error {
   details?: string;
@@ -56,7 +72,8 @@ class PublishClientError extends Error {
 
 async function safeReadJsonResponse<T = any>(
   response: Response,
-  actionLabel: string
+  actionLabel: string,
+  targetUrl?: string
 ): Promise<T> {
   const contentType = response.headers.get('content-type') || '';
   const rawText = await response.text();
@@ -88,6 +105,7 @@ async function safeReadJsonResponse<T = any>(
       {
         status: response.status,
         contentType,
+        targetUrl,
         preview: cleanPreview || 'Resposta vazia',
       },
       'general'
@@ -110,9 +128,14 @@ async function safeReadJsonResponse<T = any>(
       );
     }
     if (response.status === 404) {
+      const missingApiEnvHint = isSameOriginStaticFallbackLikely()
+        ? 'Variável VITE_PUBLISHER_API_URL não configurada no build de produção; configure-a apontando para o backend Railway.'
+        : targetUrl
+        ? `Endpoint consultado: ${targetUrl}`
+        : undefined;
       throw new PublishClientError(
-        `Serviço de publicação indisponível neste endereço (HTTP 404). Verifique se o servidor backend está ativo.`,
-        cleanPreview,
+        `Serviço de publicação indisponível neste endereço (HTTP 404). Verifique se o servidor backend está ativo e configurado.`,
+        [missingApiEnvHint, cleanPreview].filter(Boolean).join('\n'),
         'ENDPOINT_NOT_FOUND',
         404
       );
@@ -145,6 +168,35 @@ async function safeReadJsonResponse<T = any>(
   }
 
   return parsed as T;
+}
+
+async function postToPublisherApi<T = any>(
+  endpoint: string,
+  formData: FormData,
+  idToken: string,
+  actionLabel: string
+): Promise<T> {
+  const targetUrl = buildPublisherApiUrl(endpoint);
+  let response: Response;
+
+  try {
+    response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`,
+      },
+      body: formData,
+    });
+  } catch (networkErr: any) {
+    const rawMsg = String(networkErr?.message || networkErr || '');
+    throw new PublishClientError(
+      `Não foi possível conectar ao servidor de publicação ao ${actionLabel}. Verifique se o backend Railway está online, se VITE_PUBLISHER_API_URL está correto e se o domínio atual está liberado no CORS.`,
+      rawMsg ? `Destino: ${targetUrl}\nDetalhe: ${rawMsg}` : `Destino: ${targetUrl}`,
+      'NETWORK_ERROR'
+    );
+  }
+
+  return safeReadJsonResponse<T>(response, actionLabel, targetUrl);
 }
 
 interface VerificationResult {
@@ -299,25 +351,18 @@ export const GameManager = () => {
         throw new PublishClientError('Sessão administrativa expirada. Faça login novamente.');
       }
 
-      const response = await fetch('/api/games/verify', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${idToken}`
-        },
-        body: uploadForm,
-      });
-
-      const result = await safeReadJsonResponse<VerificationResult>(response, 'verificar o pacote ZIP');
+      const result = await postToPublisherApi<VerificationResult>(
+        '/api/games/verify',
+        uploadForm,
+        idToken,
+        'verificar o pacote ZIP'
+      );
       setVerificationResult(result);
 
       if (result.isApto) {
         setZipFile(file);
         setZipValidation({ valid: true });
-        if (result.requiresBuild) {
-          toast.success('Projeto React/Vite detectado! Será compilado automaticamente ao publicar.');
-        } else {
-          toast.success('Jogo HTML5 validado com sucesso!');
-        }
+        toast.success('Jogo HTML5 validado com sucesso!');
       } else {
         const errorMsg = result.errorMessage || 'O pacote ZIP não atende aos requisitos de publicação.';
         setZipValidation({ valid: false, error: errorMsg });
@@ -325,10 +370,14 @@ export const GameManager = () => {
       }
     } catch (err: any) {
       const msg = err?.message || 'Erro ao verificar o arquivo ZIP.';
+      const details =
+        err instanceof PublishClientError || err instanceof PublisherConfigError
+          ? err.details
+          : undefined;
       setZipValidation({ valid: false, error: msg });
       setPublishError({
         message: msg,
-        details: err instanceof PublishClientError ? err.details : undefined,
+        details,
       });
       toast.error(msg);
     } finally {
@@ -345,6 +394,9 @@ export const GameManager = () => {
 
     setIsSaving(true);
     setPublishError(null);
+    let pendingPublish: { publishId: string; idToken: string } | null = null;
+    let firestoreCommitted = false;
+
     try {
       let finalIframeUrl = formData.iframeUrl;
 
@@ -359,67 +411,122 @@ export const GameManager = () => {
           throw new PublishClientError('Sessão administrativa expirada. Faça login novamente.');
         }
 
-        const uploadRes = await fetch('/api/games/upload', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${idToken}`
-          },
-          body: uploadData,
-        });
-
-        const uploadResult = await safeReadJsonResponse<{
+        const uploadResult = await postToPublisherApi<{
           success: boolean;
+          publishId?: string;
           slug: string;
           iframeUrl: string;
           compiled?: boolean;
           projectTypeLabel?: string;
           storageSynced?: boolean;
           storageWarning?: string;
-        }>(uploadRes, 'compilar e publicar o jogo');
+          error?: string;
+        }>('/api/games/upload', uploadData, idToken, 'publicar o jogo');
+
+        if (!uploadResult.success || !uploadResult.iframeUrl) {
+          throw new PublishClientError(
+            uploadResult.error || 'O servidor não confirmou a publicação do jogo no Firebase Storage.',
+            undefined,
+            'PUBLISH_UNCONFIRMED'
+          );
+        }
+
+        if (uploadResult.publishId) {
+          pendingPublish = { publishId: uploadResult.publishId, idToken };
+        }
 
         finalIframeUrl = uploadResult.iframeUrl;
 
-        if (uploadResult.compiled) {
-          toast.success('Projeto compilado automaticamente e publicado!');
-        }
         if (uploadResult.storageWarning) {
           toast.warning(uploadResult.storageWarning);
         }
       }
 
+      const { id: _ignoredId, ...formFields } = formData;
       const cleanPayload = Object.fromEntries(
         Object.entries({
-          ...formData,
+          ...formFields,
           iframeUrl: finalIframeUrl || '',
         }).filter(([, value]) => value !== undefined)
       );
 
+      let savedDocId: string | undefined;
       if (editingGame) {
         await updateDoc(doc(db, 'games', editingGame.id), {
           ...cleanPayload,
           updatedAt: serverTimestamp()
         });
-        toast.success('Jogo atualizado com sucesso');
+        savedDocId = editingGame.id;
+        firestoreCommitted = true;
       } else {
-        await addDoc(collection(db, 'games'), {
+        const createdRef = await addDoc(collection(db, 'games'), {
           ...cleanPayload,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
-        toast.success('Jogo adicionado com sucesso');
+        savedDocId = createdRef.id;
+        firestoreCommitted = true;
       }
+
+      if (pendingPublish) {
+        try {
+          const confirmUrl = buildPublisherApiUrl(
+            `/api/games/publish/${encodeURIComponent(pendingPublish.publishId)}/confirm`
+          );
+          await fetch(confirmUrl, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${pendingPublish.idToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ firestoreDocId: savedDocId }),
+          });
+        } catch (confirmErr) {
+          console.warn('Confirmação de limpeza de backup adiada (jogo salvo no Firestore):', confirmErr);
+        }
+      }
+
+      toast.success(editingGame ? 'Jogo atualizado com sucesso' : 'Jogo adicionado com sucesso');
       setIsModalOpen(false);
     } catch (err: any) {
       console.error('Error saving game:', err);
+      let rollbackNotice: string | undefined;
+
+      if (pendingPublish && !firestoreCommitted) {
+        try {
+          const rollbackUrl = buildPublisherApiUrl(
+            `/api/games/publish/${encodeURIComponent(pendingPublish.publishId)}/rollback`
+          );
+          const rbRes = await fetch(rollbackUrl, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${pendingPublish.idToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ reason: 'FIRESTORE_WRITE_FAILED' }),
+          });
+          if (rbRes.ok) {
+            rollbackNotice = 'A versão anterior do jogo foi restaurada automaticamente após falha no Firestore.';
+          }
+        } catch (rollbackErr) {
+          console.error('Falha ao acionar rollback automático:', rollbackErr);
+        }
+      }
+
       const message = err?.message || 'Erro ao salvar jogo.';
-      const details = err instanceof PublishClientError ? err.details : undefined;
+      const rawDetails =
+        err instanceof PublishClientError || err instanceof PublisherConfigError
+          ? err.details
+          : undefined;
+      const details = [rawDetails, rollbackNotice].filter(Boolean).join('\n') || undefined;
+
       setPublishError({ message, details });
       await LoggerService.logError(
         `Falha ao publicar jogo "${formData.title}": ${message}`,
         { details: details?.slice(0, 400) },
         'general'
       );
-      toast.error(message);
+      toast.error(rollbackNotice ? `${message} ${rollbackNotice}` : message);
     } finally {
       setIsSaving(false);
     }
@@ -427,7 +534,12 @@ export const GameManager = () => {
 
   const handleQuickUpload = async (id: string, field: 'image' | 'icon', file?: File) => {
     if (!file) return;
-    
+    const validationError = validateInlineImageFile(file);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
@@ -547,7 +659,11 @@ export const GameManager = () => {
                         type="file" 
                         accept="image/*" 
                         className="hidden" 
-                        onChange={(e) => handleQuickUpload(game.id, 'image', e.target.files?.[0])}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = '';
+                          handleQuickUpload(game.id, 'image', file);
+                        }}
                       />
                     </label>
                   </td>
@@ -651,6 +767,14 @@ export const GameManager = () => {
                 {/* ZIP Upload Section */}
                 <div className="md:col-span-2 space-y-2">
                   <label className="text-[10px] uppercase font-black text-zinc-500 tracking-widest px-1">Upload do Motor de Jogo (Pacote .ZIP)</label>
+                  {isSameOriginStaticFallbackLikely() && (
+                    <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-2.5 text-amber-200">
+                      <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <p className="text-xs leading-relaxed">
+                        A publicação de novos pacotes <span className="font-mono font-bold">.ZIP</span> aguarda a configuração da variável <span className="font-mono font-bold">VITE_PUBLISHER_API_URL</span>. Você pode cadastrar e editar normalmente título, categoria, capa, link existente e modo manutenção no catálogo.
+                      </p>
+                    </div>
+                  )}
                   <div className={cn(
                     "relative border-2 border-dashed rounded-[2rem] p-8 transition-all flex flex-col items-center justify-center gap-3",
                     zipValidation?.valid ? "border-emerald-500/50 bg-emerald-500/5" : 
@@ -664,9 +788,7 @@ export const GameManager = () => {
                         <div className="text-center">
                           <p className="text-sm font-bold text-white">{zipFile?.name}</p>
                           <p className="text-xs text-emerald-400 mt-1">
-                            {verificationResult?.requiresBuild
-                              ? 'Projeto React/Vite validado — será compilado automaticamente ao publicar'
-                              : 'Pacote HTML5 validado com sucesso'}
+                            Pacote HTML5 compilado validado com sucesso
                           </p>
                         </div>
                       </>
@@ -677,7 +799,7 @@ export const GameManager = () => {
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-bold text-white">{zipValidation?.error || 'Arraste o arquivo .ZIP do jogo'}</p>
-                          <p className="text-xs text-zinc-500 mt-1">Aceita jogos HTML5 prontos (index.html) ou projetos React, Vite, TS e JS (package.json)</p>
+                          <p className="text-xs text-zinc-500 mt-1">Aceita jogos HTML5 já compilados com index.html na raiz e seus recursos (ex.: conteúdo da pasta dist/)</p>
                         </div>
                       </>
                     )}
@@ -726,11 +848,11 @@ export const GameManager = () => {
                         </div>
                         <div className="bg-black/20 p-3 rounded-xl border border-white/5">
                           <p className="text-[9px] uppercase font-bold text-zinc-500">
-                            {verificationResult.requiresBuild ? 'Projeto' : 'Entry Point'}
+                            Entry Point
                           </p>
-                          <p className={cn("text-sm font-black", (verificationResult.hasIndex || verificationResult.hasPackageJson) ? "text-emerald-500" : "text-red-500")}>
+                          <p className={cn("text-sm font-black", (!verificationResult.requiresBuild && verificationResult.hasIndex) ? "text-emerald-500" : "text-red-500")}>
                             {verificationResult.requiresBuild
-                              ? (verificationResult.hasPackageJson ? 'BUILD AUTO' : 'AUSENTE')
+                              ? 'BUILD LOCAL'
                               : (verificationResult.hasIndex ? 'OK' : 'AUSENTE')}
                           </p>
                         </div>
@@ -810,9 +932,18 @@ export const GameManager = () => {
                       <ImageIcon className="w-4 h-4" /><span>Upload</span>
                       <input type="file" accept="image/*" className="hidden" onChange={(e) => {
                         const file = e.target.files?.[0];
+                        e.target.value = '';
                         if (file) {
+                          const validationError = validateInlineImageFile(file);
+                          if (validationError) {
+                            toast.error(validationError);
+                            return;
+                          }
                           const reader = new FileReader();
-                          reader.onloadend = () => { setFormData({ ...formData, image: reader.result as string }); toast.success('Capa carregada'); };
+                          reader.onloadend = () => {
+                            setFormData((prev) => ({ ...prev, image: reader.result as string }));
+                            toast.success('Capa carregada');
+                          };
                           reader.readAsDataURL(file);
                         }
                       }} />
@@ -853,7 +984,7 @@ export const GameManager = () => {
                   </span>
                   <span>
                     {isSaving
-                      ? (verificationResult?.requiresBuild ? 'Compilando e Publicando...' : 'Publicando...')
+                      ? 'Publicando...'
                       : (editingGame ? 'Salvar Alterações' : 'Publicar Jogo')}
                   </span>
                 </button>

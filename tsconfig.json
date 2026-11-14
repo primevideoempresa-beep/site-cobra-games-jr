@@ -30,6 +30,8 @@
   "exclude": [
     "node_modules",
     "dist",
+    "server-dist",
+    ".games-backups",
     "public",
     "**/*.timestamp-*.mjs"
   ]

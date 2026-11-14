@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { resolveGameIframeUrl, isGameUrlPendingPublisher } from '../lib/publisherApi';
 import { AnalyticsService } from '../services/analytics';
 import { otherGames } from '../data';
 import { toast } from 'sonner';
@@ -43,8 +44,11 @@ export const GamePlayerPage: React.FC = () => {
     if (!isGameReady || !gameId) return;
 
     const interval = setInterval(() => {
-      // General heartbeat to track dwell time
-      AnalyticsService.trackDeskRacerHeartbeat(30); 
+      if (gameId === 'desk_racer' || gameId === 'desk-racer') {
+        AnalyticsService.trackDeskRacerHeartbeat(30);
+      } else {
+        AnalyticsService.trackGameHeartbeat(gameId, 30);
+      }
     }, 30000);
 
     return () => clearInterval(interval);
@@ -255,6 +259,19 @@ export const GamePlayerPage: React.FC = () => {
               </button>
             </div>
           </div>
+        ) : isGameUrlPendingPublisher(game.iframeUrl) ? (
+          <div className="flex-1 flex items-center justify-center p-6 bg-slate-950 text-center">
+            <div className="max-w-md bg-slate-900 border border-blue-500/20 rounded-[2.5rem] p-8 sm:p-10 space-y-5 shadow-2xl">
+              <Gamepad2 className="w-14 h-14 text-blue-400 mx-auto" />
+              <h2 className="text-xl font-black text-white uppercase tracking-tight">Servidor de Jogos Pendente</h2>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Este jogo foi publicado via pacote ZIP e aguarda a configuração da URL pública do servidor de jogos (<code className="text-blue-300 font-mono text-xs">VITE_PUBLISHER_API_URL</code>).
+              </p>
+              <button type="button" onClick={() => navigate('/')} className="w-full px-8 py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl text-sm font-black transition-all cursor-pointer">
+                <span>Explorar Outros Jogos</span>
+              </button>
+            </div>
+          </div>
         ) : game.iframeUrl ? (
           <div className={`flex-1 bg-black relative ${isFullscreen ? 'h-full' : 'min-h-[65vh] sm:min-h-[520px]'}`}>
             {/* Professional Loading Layer */}
@@ -290,7 +307,7 @@ export const GamePlayerPage: React.FC = () => {
             <iframe
               key={`${gameId || 'game'}-${iframeKey}`}
               ref={iframeRef}
-              src={game.iframeUrl}
+              src={resolveGameIframeUrl(game.iframeUrl)}
               title={game.title}
               className={`w-full h-full border-0 transition-opacity duration-1000 ${isFullscreen ? 'min-h-screen' : 'min-h-[65vh] sm:min-h-[520px]'} ${isGameReady ? 'opacity-100' : 'opacity-0'}`}
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
